@@ -116,7 +116,7 @@ func ValidCellIndex(board *Board, x, y int) bool {
     return !(x < 0 || x >= board.width || y >= board.height || y < 0)
 }
 
-func MakeMove(board *Board, x, y int) (*MoveResult, error) {
+func (board *Board) MakeMove(x, y int) (*MoveResult, error) {
     if !ValidCellIndex(board, x, y){
         return nil, &InvalidMoveError{board, x, y};
     }
@@ -245,7 +245,7 @@ func main() {
                 return
             }
         }else{
-            result, err := MakeMove(board, x, y)
+            result, err := board.MakeMove(x, y)
             if err != nil {
                 fmt.Println(err)
                 return
