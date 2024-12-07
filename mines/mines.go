@@ -1,4 +1,4 @@
-package main
+package mines
 
 import (
 	"fmt"
@@ -41,6 +41,7 @@ const (
     NoChange MoveResultType = iota
     MineBlown
     CellRevealed
+    Flagged
 )
 
 type MoveResult struct {
@@ -106,8 +107,8 @@ func Cascade(board *Board, cell *Cell, updatedCells []*Cell) ([]*Cell){
         return updatedCells
     }
     for _, ncell := range GetNeighbouringCells(board, cell){
-        if !ncell.revealed {
-            Cascade(board, ncell, updatedCells)
+        if !ncell.revealed && !ncell.flagged {
+            updatedCells = Cascade(board, ncell, updatedCells)
         }
     }
     return updatedCells
@@ -128,7 +129,7 @@ func (board *Board) MakeMove(x, y int) (*MoveResult, error) {
         return &MoveResult{MineBlown, []*Cell{cell}}, nil
     }
     var updatedCells = []*Cell{}
-    Cascade(board, cell, updatedCells)
+    updatedCells = Cascade(board, cell, updatedCells)
     return &MoveResult{CellRevealed, updatedCells}, nil
 }
 
@@ -205,13 +206,44 @@ func (board *Board) RemainingCells() int {
     return remaining
 }
 
-func (board *Board) Flag(x, y int) error {
+func (board *Board) Flag(x, y int) (bool, error) {
     
     if !ValidCellIndex(board, x, y){
-        return &InvalidMoveError{board, x, y};
+        return false, &InvalidMoveError{board, x, y};
+    }
+    if board.cells[x][y].revealed {
+        return false, nil
     }
     board.cells[x][y].flagged = !board.cells[x][y].flagged
-    return nil
+    return true, nil
+}
+func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
+    var x, y int
+    var flag rune
+    flag = 'X'
+    n, _ := fmt.Sscanf(text, "%d %d %c\n", &x, &y, &flag)
+    if n < 2 {
+        println(n)
+        return nil, fmt.Errorf("Incorrect input")
+    }
+    if flag == 'f' || flag == 'F' {
+        flagged, err := board.Flag(x, y)
+        if err != nil {
+            return nil, err
+        }
+        if flagged {
+            return &MoveResult{Flagged, []*Cell{board.cells[x][y]}}, nil 
+        }else{
+            return &MoveResult{NoChange, nil}, nil
+        }
+    }else{
+        result, err := board.MakeMove(x, y)
+        println(result.UpdatedCells)
+        if err != nil {
+            return nil, err
+        }
+        return result, nil
+    }
 }
 
 func main() {
@@ -221,8 +253,6 @@ func main() {
         fmt.Println(err)
         return
     }
-    var x, y int
-    var flag rune
     for {
         println("****************")
         remaining := board.RemainingCells()
@@ -231,29 +261,6 @@ func main() {
         if remaining == mines{
             println("CLEARED")
             return
-        }
-        flag = 'X'
-        n, _ := fmt.Scanf("%d %d %c\n", &x, &y, &flag)
-        if n < 2 {
-            println(n)
-            return
-        }
-        if flag == 'f' || flag == 'F' {
-            err = board.Flag(x, y)
-            if err != nil {
-                fmt.Println(err)
-                return
-            }
-        }else{
-            result, err := board.MakeMove(x, y)
-            if err != nil {
-                fmt.Println(err)
-                return
-            }
-            if result.Result == MineBlown{
-                println("BOOM")
-                return
-            }
         }
     }
     
