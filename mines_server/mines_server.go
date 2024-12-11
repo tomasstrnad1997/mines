@@ -23,8 +23,8 @@ var (
 )
 
 
-func StartNewGame(width, heigt, n_mines int) (*mines.Board, error){
-    board, err := mines.CreateBoard(10, 10, 5);
+func StartNewGame(width, height, n_mines int) (*mines.Board, error){
+    board, err := mines.CreateBoard(width, height, n_mines);
     if err != nil {
         fmt.Println(err)
         return nil, err
@@ -48,7 +48,6 @@ func handleRequest(player *Player, board *mines.Board){
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
     broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
-
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -78,6 +77,7 @@ func handleRequest(player *Player, board *mines.Board){
         board.Print()
 	}
 }
+
 func createServer() (net.Listener, error){
     
     listener, err := net.Listen("tcp", "localhost:8080")
