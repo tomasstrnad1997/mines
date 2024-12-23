@@ -134,7 +134,7 @@ func decodeCellFlags(flags byte, cell *mines.Cell){
 }
 
 func decodeCell(data []byte) (*mines.Cell, error){
-    if len(data) != 9{
+    if len(data) != CellByteLength{
         return nil, fmt.Errorf("Invalid length to decode cell (%d)", len(data))
     }
     cell := mines.Cell{}
@@ -168,6 +168,7 @@ func EncodeBoard(board *mines.Board) ([]byte, error){
 
 const (
     CellByteLength = 9
+    UpdateCellByteLength = 9
 )
 
 func DecodeBoard(data []byte) (*mines.Board, error){
@@ -212,6 +213,67 @@ func DecodeBoard(data []byte) (*mines.Board, error){
 
     return board, nil
 }
+
+func encodeCellUpdate(cell mines.UpdatedCell) []byte {
+    data := make([]byte, UpdateCellByteLength)
+    copy(data[0:4], intToBytes(cell.X))
+    copy(data[4:8], intToBytes(cell.Y))
+    data[8] = cell.Value
+    return data
+
+}
+
+func EncodeCellUpdates(cells []mines.UpdatedCell) ([]byte, error) {
+    var buf bytes.Buffer
+    buf.WriteByte(byte(Board))
+    buf.WriteByte(byte(0x00))
+    payloadLength := len(cells) * UpdateCellByteLength
+    err := writeLength(&buf, payloadLength)
+    if err != nil {
+        return nil, err
+    }
+    for _, cell := range cells {
+        buf.Write(encodeCellUpdate(cell))
+    }
+    if payloadLength + 4 != buf.Len(){
+        return nil, fmt.Errorf("Incorrect payload length while encoding cell updates")
+    }
+    return buf.Bytes(), nil
+}
+ 
+func decodeCellUpdate(data []byte) (*mines.UpdatedCell, error){
+    if len(data) != UpdateCellByteLength {
+        return nil, fmt.Errorf("incorrect byte length to decode cell update (%d)", len(data))
+    }
+    cell := &mines.UpdatedCell{
+        X: bytesToInt(data[0:4]),
+        Y: bytesToInt(data[0:4]),
+        Value: data[8]}
+    return cell, nil
+    
+}
+
+func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
+
+    payloadLength, err := checkAndDecodeLength(data, Board)
+    if err != nil {
+        return nil, err
+    }
+    payload := data[4:]
+    if payloadLength % UpdateCellByteLength != 0 {
+        return nil, fmt.Errorf("update cells payload length mismatch")
+    }
+    cells := make([]mines.UpdatedCell, payloadLength / UpdateCellByteLength)
+    for i:=0; i<payloadLength/UpdateCellByteLength; i++{
+        cell, err := decodeCellUpdate(payload[i*UpdateCellByteLength: (i+1)*UpdateCellByteLength])
+        if err != nil {
+            return nil, err
+        }
+        cells[i] = *cell
+    }
+    return cells, nil
+}
+
 
 func main() {
     RegisterHandler(MoveCommand, func(bytes []byte) error {
