@@ -44,14 +44,15 @@ func bytesToInt(bytes []byte) int{
     return int(binary.BigEndian.Uint32(bytes))
 }
 
-func EncodeMove(x, y int)([]byte, error){
+func EncodeMove(move mines.Move)([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(MoveCommand))
     // Reserved byte for future use
     buf.WriteByte(byte(0x00))
-    payload := make([]byte, 8)
-    copy(payload[:4], intToBytes(x))
-    copy(payload[4:8], intToBytes(y))
+    payload := make([]byte, 9)
+    payload[0] = byte(move.Type);
+    copy(payload[1:5], intToBytes(move.X))
+    copy(payload[5:9], intToBytes(move.Y))
     payloadLength := len(payload)
     err := binary.Write(&buf, binary.BigEndian, uint16(payloadLength))
     if err != nil {
@@ -77,28 +78,31 @@ func checkAndDecodeLength(data []byte, message MessageType) (int, error){
 }
 
 
-func DecodeMove(data []byte) (x, y int, err error){
+func DecodeMove(data []byte) (move* mines.Move, err error){
     _, err = checkAndDecodeLength(data, MoveCommand)
     if err != nil {
-        return 0, 0, err
+        return nil, err
     }
+    move = &mines.Move{}
     payload := data[4:]
-    x = bytesToInt(payload[0:4])
-    y = bytesToInt(payload[4:8])
-    return x, y, nil
+    move.Type = mines.MoveType(payload[0])
+    move.X = bytesToInt(payload[1:5])
+    move.Y = bytesToInt(payload[5:9])
+    return move, nil
 }
 
 func main() {
     RegisterHandler(MoveCommand, func(bytes []byte) error {
-        x, y, err := DecodeMove(bytes)
+        move, err := DecodeMove(bytes)
         if err != nil{
             return err
         }
-        fmt.Printf("%d, %d\n", x, y)
+        println((*move).String())
         return nil
 
     })
-    encoded, err := EncodeMove(10, 5)
+    move := mines.Move{X:5, Y:5, Type:0x02} 
+    encoded, err := EncodeMove(move)
     if err != nil{
         println(err.Error())
     }

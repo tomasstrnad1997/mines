@@ -23,6 +23,30 @@ type Board struct {
 
 }
 
+type MoveType byte
+const (
+    Reveal MoveType = 0x01
+    Flag = 0x02
+)
+
+type Move struct {
+    X int
+    Y int
+    Type MoveType
+}
+
+func (move Move) String() string {
+    msg := fmt.Sprintf("(%d, %d) ", move.X, move.Y)
+    switch move.Type {
+    case Reveal:
+        return msg + "Reveal" 
+    case Flag:
+        return msg + "Flag" 
+    default:
+        return msg + "UNKNOWN" 
+    }
+}
+
 type InvalidBoardParamsError struct {
     height int
     width int
@@ -48,6 +72,8 @@ type MoveResult struct {
     Result MoveResultType
     UpdatedCells []*Cell
 }
+
+
 
 func (e InvalidMoveError) Error() string {
     return fmt.Sprintf("Move out of range - (%d, %d) - Board (%d, %d)", e.x, e.y, e.board.width, e.board.height)
@@ -117,7 +143,7 @@ func ValidCellIndex(board *Board, x, y int) bool {
     return !(x < 0 || x >= board.width || y >= board.height || y < 0)
 }
 
-func (board *Board) MakeMove(x, y int) (*MoveResult, error) {
+func (board *Board) Reveal(x, y int) (*MoveResult, error) {
     if !ValidCellIndex(board, x, y){
         return nil, &InvalidMoveError{board, x, y};
     }
@@ -206,17 +232,30 @@ func (board *Board) RemainingCells() int {
     return remaining
 }
 
-func (board *Board) Flag(x, y int) (bool, error) {
+func (board *Board) Flag(x, y int) (*MoveResult, error) {
     
     if !ValidCellIndex(board, x, y){
-        return false, &InvalidMoveError{board, x, y};
+        return nil, &InvalidMoveError{board, x, y};
     }
     if board.cells[x][y].revealed {
-        return false, nil
+        return &MoveResult{NoChange, nil}, nil
     }
     board.cells[x][y].flagged = !board.cells[x][y].flagged
-    return true, nil
+    return &MoveResult{Flagged, []*Cell{board.cells[x][y]}}, nil 
 }
+
+func (board *Board) MakeMove(move Move) (*MoveResult, error){
+    switch move.Type {
+        case Reveal:
+            return board.Reveal(move.X, move.Y)
+        case Flag:
+            return board.Flag(move.X, move.Y)
+        default:
+            return nil, fmt.Errorf("Invalid move type %x", move.Type)
+
+    }
+}
+
 func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
     var x, y int
     var flag rune
@@ -227,17 +266,9 @@ func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
         return nil, fmt.Errorf("Incorrect input")
     }
     if flag == 'f' || flag == 'F' {
-        flagged, err := board.Flag(x, y)
-        if err != nil {
-            return nil, err
-        }
-        if flagged {
-            return &MoveResult{Flagged, []*Cell{board.cells[x][y]}}, nil 
-        }else{
-            return &MoveResult{NoChange, nil}, nil
-        }
+        return board.Flag(x, y)
     }else{
-        result, err := board.MakeMove(x, y)
+        result, err := board.Reveal(x, y)
         println(result.UpdatedCells)
         if err != nil {
             return nil, err
@@ -249,6 +280,8 @@ func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
 func main() {
     mines := 5
     board, err := CreateBoard(5, 5, mines);
+    move := Move{1, 2, 0x02}
+    board.MakeMove(move)
     if err != nil {
         fmt.Println(err)
         return
