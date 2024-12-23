@@ -13,12 +13,28 @@ type MessageType byte
 type MessageHandler func([]byte) error
 const (
     MoveCommand MessageType = 0x01
+    TextMessage = 0x02
+    Board = 0x03
 )
 
 
 
 
 var messageHandlers = make(map[MessageType]MessageHandler)
+
+func checkAndDecodeLength(data []byte, message MessageType) (int, error){
+    if len(data) < 4 {
+        return 0, fmt.Errorf("Data too short to decode")
+    }
+    if MessageType(data[0]) != message {
+        return 0, fmt.Errorf("Invalid message type for command")
+    }
+    payloadLength := int(binary.BigEndian.Uint16(data[2:4]))
+    if payloadLength != len(data) - 4 {
+        return payloadLength, fmt.Errorf("Payload size is invalid") // TODO: make a custom error 
+    }
+    return payloadLength, nil
+}
 
 func HandleMessage(bytes []byte) error {
 
@@ -44,6 +60,14 @@ func bytesToInt(bytes []byte) int{
     return int(binary.BigEndian.Uint32(bytes))
 }
 
+func writeLength(buf *bytes.Buffer, length int) error {
+    err := binary.Write(buf, binary.BigEndian, uint16(length))
+    if err != nil {
+        return fmt.Errorf("Failed to write payload length (%d)", length)
+    }
+    return nil
+}
+
 func EncodeMove(move mines.Move)([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(MoveCommand))
@@ -53,30 +77,14 @@ func EncodeMove(move mines.Move)([]byte, error){
     payload[0] = byte(move.Type);
     copy(payload[1:5], intToBytes(move.X))
     copy(payload[5:9], intToBytes(move.Y))
-    payloadLength := len(payload)
-    err := binary.Write(&buf, binary.BigEndian, uint16(payloadLength))
+    err := writeLength(&buf, len(payload))
     if err != nil {
-        return nil, fmt.Errorf("Failed to write payload (length: %d)", payloadLength)
+        return nil, err
     }
     buf.Write(payload)
     return buf.Bytes(), nil
 
 }
-
-func checkAndDecodeLength(data []byte, message MessageType) (int, error){
-    if len(data) < 4 {
-        return 0, fmt.Errorf("Data too short to decode")
-    }
-    if MessageType(data[0]) != message {
-        return 0, fmt.Errorf("Invalid message type for command")
-    }
-    payloadLength := int(binary.BigEndian.Uint16(data[2:4]))
-    if payloadLength != len(data) - 4 {
-        return payloadLength, fmt.Errorf("Payload size is invalid") // TODO: make a custom error 
-    }
-    return payloadLength, nil
-}
-
 
 func DecodeMove(data []byte) (move* mines.Move, err error){
     _, err = checkAndDecodeLength(data, MoveCommand)
@@ -89,6 +97,120 @@ func DecodeMove(data []byte) (move* mines.Move, err error){
     move.X = bytesToInt(payload[1:5])
     move.Y = bytesToInt(payload[5:9])
     return move, nil
+}
+
+const (
+    MineFlag    byte = 0b0001
+    RevealedFlag byte = 0b0010
+    FlaggedFlag  byte = 0b0100
+)
+
+func encodeCellFlags(cell *mines.Cell) byte {
+    var flags byte = 0x00
+    if cell.Mine {
+        flags |= MineFlag
+    }
+    if cell.Revealed {
+        flags |= RevealedFlag
+    }
+    if cell.Flagged {
+        flags |= FlaggedFlag
+    }
+    return flags
+}
+
+func encodeCell(cell *mines.Cell) []byte {
+    encoded := make([]byte, 9)
+    copy(encoded[0:4], intToBytes(cell.X))
+    copy(encoded[4:8], intToBytes(cell.Y))
+    encoded[8] = encodeCellFlags(cell)
+    return encoded
+}
+
+func decodeCellFlags(flags byte, cell *mines.Cell){
+    cell.Mine = (flags & MineFlag) != 0
+    cell.Revealed = (flags & RevealedFlag) != 0
+    cell.Flagged = (flags & FlaggedFlag) != 0
+}
+
+func decodeCell(data []byte) (*mines.Cell, error){
+    if len(data) != 9{
+        return nil, fmt.Errorf("Invalid length to decode cell (%d)", len(data))
+    }
+    cell := mines.Cell{}
+    cell.X = bytesToInt(data[0:4])
+    cell.Y = bytesToInt(data[4:8])
+    flags := data[8]
+    decodeCellFlags(flags, &cell)
+    return &cell, nil
+}
+
+func EncodeBoard(board *mines.Board) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(Board))
+    buf.WriteByte(byte(0x00))
+    var boardBuf bytes.Buffer
+    boardBuf.Write(intToBytes(board.Height))
+    boardBuf.Write(intToBytes(board.Width))
+    for y := 0; y < board.Height; y++{
+        for x := 0; x < board.Width; x++{
+            boardBuf.Write(encodeCell(board.Cells[x][y]))
+        }
+    }
+    err := writeLength(&buf, boardBuf.Len())
+    if err != nil{
+        return nil, err
+    }
+    buf.Write(boardBuf.Bytes())
+    return buf.Bytes(), nil
+
+}
+
+const (
+    CellByteLength = 9
+)
+
+func DecodeBoard(data []byte) (*mines.Board, error){
+    _, err := checkAndDecodeLength(data, Board)
+    if err != nil {
+        return nil, err
+    }
+    payload := data[4:]
+    
+    if len(payload) < 8 {
+        return nil, fmt.Errorf("payload too short to contain board dimensions")
+    }
+
+    board := &mines.Board{}
+    board.Height = bytesToInt(payload[0:4])
+    board.Width = bytesToInt(payload[4:8])
+    grid := make([][]*mines.Cell, board.Width)
+    for i := range grid {
+        grid[i] = make([]*mines.Cell, board.Height)
+    }
+    board.Cells = grid
+    cells := payload[8:]
+    if len(cells) % CellByteLength != 0{
+        return nil, fmt.Errorf("Cells payload length mismatch")
+    }
+    if len(cells) / CellByteLength != board.Height * board.Width{
+        return nil, fmt.Errorf("Number of cells doesnt match board size")
+    }
+    for i := 0; i < len(cells); i+= CellByteLength{
+        cell, err := decodeCell(cells[i: i+CellByteLength]) 
+        if err != nil {
+            return nil, err
+        }
+        if cell.X < 0 || cell.X >= board.Width || cell.Y < 0 || cell.Y >= board.Height {
+            return nil, fmt.Errorf("Cell position out of bounds: (%d, %d)", cell.X, cell.Y)
+        }
+        if board.Cells[cell.X][cell.Y] != nil{
+            return nil, fmt.Errorf("Duplicate entry of a cell")
+        }
+        board.Cells[cell.X][cell.Y] = cell
+    }
+
+    return board, nil
 }
 
 func main() {

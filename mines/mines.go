@@ -8,18 +8,18 @@ import (
 
 type Cell struct
 {
-    mine bool
-    revealed bool
-    flagged bool
-    x int 
-    y int
+    Mine bool
+    Revealed bool
+    Flagged bool
+    X int 
+    Y int
 
 }
 
 type Board struct {
-    height int
-    width int
-    cells [][]*Cell
+    Height int
+    Width int
+    Cells [][]*Cell
 
 }
 
@@ -76,7 +76,7 @@ type MoveResult struct {
 
 
 func (e InvalidMoveError) Error() string {
-    return fmt.Sprintf("Move out of range - (%d, %d) - Board (%d, %d)", e.x, e.y, e.board.width, e.board.height)
+    return fmt.Sprintf("Move out of range - (%d, %d) - Board (%d, %d)", e.x, e.y, e.board.Width, e.board.Height)
 }
 
 func (e InvalidBoardParamsError) Error() string {
@@ -116,7 +116,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
         mines_position[i], mines_position[j] = mines_position[j], mines_position[i]
     })
     for _, position := range mines_position[:mines]{
-        cells[position / width][position % height].mine = true;
+        cells[position / width][position % height].Mine = true;
     }
 
 
@@ -126,32 +126,32 @@ func CreateBoard(width, height, mines int) (*Board, error) {
 
 
 func Cascade(board *Board, cell *Cell, updatedCells []*Cell) ([]*Cell){
-    cell.revealed = true
+    cell.Revealed = true
     updatedCells = append(updatedCells, cell)
 
     if GetNumberOfMines(board, cell) != 0 {
         return updatedCells
     }
     for _, ncell := range GetNeighbouringCells(board, cell){
-        if !ncell.revealed && !ncell.flagged {
+        if !ncell.Revealed && !ncell.Flagged {
             updatedCells = Cascade(board, ncell, updatedCells)
         }
     }
     return updatedCells
 }
 func ValidCellIndex(board *Board, x, y int) bool {
-    return !(x < 0 || x >= board.width || y >= board.height || y < 0)
+    return !(x < 0 || x >= board.Width || y >= board.Height || y < 0)
 }
 
 func (board *Board) Reveal(x, y int) (*MoveResult, error) {
     if !ValidCellIndex(board, x, y){
         return nil, &InvalidMoveError{board, x, y};
     }
-    var cell = board.cells[x][y]
-    if cell.revealed || cell.flagged{
+    var cell = board.Cells[x][y]
+    if cell.Revealed || cell.Flagged{
         return &MoveResult{NoChange, nil}, nil
     }
-    if cell.mine {
+    if cell.Mine {
         return &MoveResult{MineBlown, []*Cell{cell}}, nil
     }
     var updatedCells = []*Cell{}
@@ -163,10 +163,10 @@ func GetNeighbouringCells(board *Board, cell *Cell) []*Cell {
     var cells []*Cell
     for dx := -1; dx <= 1; dx++{
         for dy := -1; dy <= 1; dy++{
-            x := cell.x + dx
-            y := cell.y + dy
+            x := cell.X + dx
+            y := cell.Y + dy
             if ValidCellIndex(board, x, y){
-                cells = append(cells, board.cells[x][y])
+                cells = append(cells, board.Cells[x][y])
             }
         }
     }
@@ -177,7 +177,7 @@ func GetNeighbouringCells(board *Board, cell *Cell) []*Cell {
 func GetNumberOfMines(board *Board, cell *Cell) int {
     mines := 0 
     for _, cell := range GetNeighbouringCells(board, cell){
-        if cell.mine {
+        if cell.Mine {
             mines ++
         }
     }
@@ -187,16 +187,16 @@ func GetNumberOfMines(board *Board, cell *Cell) int {
 
 func (board *Board) Print() {
     print("X")
-    for i:=0; i < board.width; i++{
+    for i:=0; i < board.Width; i++{
         print(i % 10)
     }
     println()
-    for y := 0; y < board.height; y++{
+    for y := 0; y < board.Height; y++{
         print(y % 10)
-        for x := 0; x < board.width; x++{
-            if board.cells[x][y].revealed{
-                print(strconv.Itoa(GetNumberOfMines(board, board.cells[x][y])))
-            }else if board.cells[x][y].flagged{
+        for x := 0; x < board.Width; x++{
+            if board.Cells[x][y].Revealed{
+                print(strconv.Itoa(GetNumberOfMines(board, board.Cells[x][y])))
+            }else if board.Cells[x][y].Flagged{
                 print("F")
 
             }else{
@@ -208,9 +208,9 @@ func (board *Board) Print() {
 
 }
 func (board *Board) PrintRevaled() {
-    for y := 0; y < board.height; y++{
-        for x := 0; x < board.width; x++{
-            if board.cells[x][y].mine{
+    for y := 0; y < board.Height; y++{
+        for x := 0; x < board.Width; x++{
+            if board.Cells[x][y].Mine{
                 print("O")
             }else{
                 print("#")
@@ -222,9 +222,9 @@ func (board *Board) PrintRevaled() {
 }
 func (board *Board) RemainingCells() int {
     remaining := 0
-    for _, column := range board.cells{
+    for _, column := range board.Cells{
         for _, cell := range column{
-            if !cell.revealed {
+            if !cell.Revealed {
                 remaining++
             }
         }
@@ -237,11 +237,11 @@ func (board *Board) Flag(x, y int) (*MoveResult, error) {
     if !ValidCellIndex(board, x, y){
         return nil, &InvalidMoveError{board, x, y};
     }
-    if board.cells[x][y].revealed {
+    if board.Cells[x][y].Revealed {
         return &MoveResult{NoChange, nil}, nil
     }
-    board.cells[x][y].flagged = !board.cells[x][y].flagged
-    return &MoveResult{Flagged, []*Cell{board.cells[x][y]}}, nil 
+    board.Cells[x][y].Flagged = !board.Cells[x][y].Flagged
+    return &MoveResult{Flagged, []*Cell{board.Cells[x][y]}}, nil 
 }
 
 func (board *Board) MakeMove(move Move) (*MoveResult, error){
