@@ -74,6 +74,17 @@ type MoveResult struct {
 }
 
 
+const (
+    ShowCount byte = 0x00
+    ShowMine  = 0x10
+    ShowFlag = 0x20
+)
+
+type UpdatedCell struct{
+    X int
+    Y int
+    Value byte
+}
 
 func (e InvalidMoveError) Error() string {
     return fmt.Sprintf("Move out of range - (%d, %d) - Board (%d, %d)", e.x, e.y, e.board.Width, e.board.Height)
@@ -275,6 +286,27 @@ func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
         }
         return result, nil
     }
+}
+
+func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
+    updates := make([]UpdatedCell, len(cells))
+    var value byte
+    for i, cell := range cells {
+        if cell.Revealed {
+            if cell.Mine {
+                value = ShowMine
+            }else {
+                value = (byte(GetNumberOfMines(board, cell)))
+            }
+        } else if cell.Flagged {
+            value = ShowFlag
+        } else {
+            return nil, fmt.Errorf("Unknown update cell")
+        }
+        updates[i] = UpdatedCell{X: cell.X, Y: cell.Y, Value:value}
+    }
+    return updates, nil
+    
 }
 
 func main() {

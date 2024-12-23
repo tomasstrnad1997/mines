@@ -18,17 +18,6 @@ const (
 )
 
 
-const (
-    ShowCount byte = 0x00
-    ShowMine  = 0x10
-    ShowFlag = 0x20
-)
-
-type UpdatedCell struct{
-    X int
-    Y int
-    Value byte
-}
 
 
 var messageHandlers = make(map[MessageType]MessageHandler)

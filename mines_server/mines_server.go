@@ -100,29 +100,6 @@ func RegisterHandlers(board *mines.Board){
 
 }
 
-// IDEA: move UpdatedCell and this function to mines base module
-func CreateUpdatedCells(board *mines.Board, cells []*mines.Cell) ([]protocol.UpdatedCell, error){
-    updates := make([]protocol.UpdatedCell, len(cells))
-    var value byte
-    for i, cell := range cells {
-        
-        if cell.Revealed {
-            if cell.Mine {
-                value = protocol.ShowMine
-            }else {
-                value = (byte(mines.GetNumberOfMines(board, cell)))
-            }
-        } else if cell.Flagged {
-            value = protocol.ShowFlag
-        } else {
-            return nil, fmt.Errorf("Unknown update cell")
-        }
-        updates[i] = protocol.UpdatedCell{X: cell.X, Y: cell.Y, Value:value}
-    }
-    return updates, nil
-    
-}
-
 
 func createServer() (net.Listener, error){
     
