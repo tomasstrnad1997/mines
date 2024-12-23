@@ -50,7 +50,23 @@ func ReadServerResponse(client net.Conn){
     }
     
 }
-func RegisterHandlers(){
+
+func printBoard(board *[][]rune){
+    print("X")
+    for i:=0; i < 10; i++{
+        print(i % 10)
+    }
+    println()
+    for y := 0; y < 10; y++{
+        print(y % 10)
+        for x := 0; x < 10; x++{
+            fmt.Printf("%c",(*board)[x][y])
+        }
+        println()
+    }
+}
+
+func RegisterHandlers(board *[][]rune){
     protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
         updates, err := protocol.DecodeCellUpdates(bytes)
         if err != nil{
@@ -67,20 +83,30 @@ func RegisterHandlers(){
             }else{
                 rep = 'U'
             }
-            fmt.Printf("Move: %d, %d - %c\n", cell.X, cell.Y, rep)
+            (*board)[cell.X][cell.Y] = rep
+            // fmt.Printf("Move: %d, %d - %c\n", cell.X, cell.Y, rep)
         }
+        printBoard(board)
         return nil
     })
 
 }
-
 func main() {
     client, err := createClient()
+    board := make([][]rune, 10)
+    for i := range board {
+        board[i] = make([]rune, 10)
+        for j := 0; j < 10; j++{
+            board[i][j] = '#'
+        }
+    }
+        
+    
     if err != nil {
         println(err.Error())
         os.Exit(1)
     }
-    RegisterHandlers()
+    RegisterHandlers(&board)
     go ReadServerResponse(client)
 
     for {
