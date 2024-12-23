@@ -1,9 +1,12 @@
 package main
 
 import (
-	"bufio"
+	"fmt"
 	"net"
 	"os"
+
+	"github.com/tomasstrnad1997/mines"
+	protocol "github.com/tomasstrnad1997/mines_protocol"
 )
 
 func createClient() (*net.TCPConn, error){
@@ -41,15 +44,29 @@ func main() {
         println(err.Error())
         os.Exit(1)
     }
-    reader := bufio.NewReader(os.Stdin)
     go ReadServerResponse(client)
 
     for {
-        line, err := reader.ReadString('\n')
+        var x, y int
+        var flag rune
+        flag = 'X'
+        n, _ := fmt.Scanf("%d %d %c\n", &x, &y, &flag)
+        var move mines.Move
+        if n < 2 {
+            fmt.Errorf("Incorrect input")
+            continue
+        }
+        if flag == 'f' || flag == 'F' {
+            move = mines.Move{X: x, Y: y, Type: mines.Flag}
+            
+        }else{
+            move = mines.Move{X: x, Y: y, Type: mines.Reveal}
+        }
+        encoded, err := protocol.EncodeMove(move)
         if err != nil {
             println(err.Error())
-            return
+            continue
         }
-        client.Write([]byte(line))
+        client.Write(encoded)
     }   
 }

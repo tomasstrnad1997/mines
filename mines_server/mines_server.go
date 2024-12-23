@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
 	"github.com/tomasstrnad1997/mines"
+	"github.com/tomasstrnad1997/mines_protocol"
 )
 
 type Player struct{
@@ -41,7 +44,16 @@ func broadcastMessage(message string) {
     }
 }
 
-func handleRequest(player *Player, board *mines.Board){
+func broadcast(data []byte) {
+    for id := range players {
+        println(id)
+        if players[id].connected {
+            players[id].client.Write(data)
+        }
+    }
+}
+
+func handleRequest(player *Player){
     reader := bufio.NewReader(player.client)
     clientsMux.Lock()
     clients[player.id] = true
@@ -49,9 +61,9 @@ func handleRequest(player *Player, board *mines.Board){
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
     broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-
+        header := make([]byte, 4)
+		bytesRead, err := reader.Read(header)
+		if err != nil  || bytesRead != 4{
             fmt.Printf("Player %d disconnected \n", player.id)
             broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
             players[player.id].connected = false
@@ -61,22 +73,56 @@ func handleRequest(player *Player, board *mines.Board){
 			player.client.Close()
 			return
 		}
-        boardMutex.Lock()
-        result, err := board.ProcessTextCommand(string(message))
+        messageLenght := int(binary.BigEndian.Uint16(header[2:4]))
+        message := make([]byte, messageLenght+4)
+        copy(message[0:4], header)
+        _, err = io.ReadFull(reader, message[4:])
         if err != nil {
-            fmt.Fprintln(player.client, err.Error())
-        }else{
-            println(len(result.UpdatedCells))
-            if len(result.UpdatedCells) > 0 {
-                broadcastMessage(fmt.Sprintf("Player %d played: %s Updated cells: %d", player.id, string(message), len(result.UpdatedCells)))
-            }
+            fmt.Printf("Error reading message")
+            continue
         }
-        boardMutex.Unlock()
-        fmt.Printf("Player %d played: %s\n", player.id, string(message))
+        protocol.HandleMessage(message)    
 
-        board.Print()
+
 	}
 }
+func RegisterHandlers(board *mines.Board){
+
+    protocol.RegisterHandler(protocol.MoveCommand, func(bytes []byte) error { 
+        move, err := protocol.DecodeMove(bytes)
+        if err != nil{
+            return err
+        }
+        board.MakeMove(*move)
+        board.Print()
+        return nil
+    })
+
+}
+
+// IDEA: move UpdatedCell and this function to mines base module
+func CreateUpdatedCells(board *mines.Board, cells []*mines.Cell) ([]protocol.UpdatedCell, error){
+    updates := make([]protocol.UpdatedCell, len(cells))
+    var value byte
+    for i, cell := range cells {
+        
+        if cell.Revealed {
+            if cell.Mine {
+                value = protocol.ShowMine
+            }else {
+                value = (byte(mines.GetNumberOfMines(board, cell)))
+            }
+        } else if cell.Flagged {
+            value = protocol.ShowFlag
+        } else {
+            return nil, fmt.Errorf("Unknown update cell")
+        }
+        updates[i] = protocol.UpdatedCell{X: cell.X, Y: cell.Y, Value:value}
+    }
+    return updates, nil
+    
+}
+
 
 func createServer() (net.Listener, error){
     
@@ -103,7 +149,7 @@ func RunGame(board *mines.Board){
         }
         player := &Player{conn, id, true}
         players[player.id] = player
-        go handleRequest(player, board)
+        go handleRequest(player)
         id++
     }
 
@@ -117,6 +163,7 @@ func main() {
         fmt.Println(err)
         return
     }
+    RegisterHandlers(board)
     fmt.Println("Server")
     board.Print()
 
