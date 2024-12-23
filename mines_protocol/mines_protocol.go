@@ -15,6 +15,7 @@ const (
     MoveCommand MessageType = 0x01
     TextMessage = 0x02
     Board = 0x03
+    StartGame = 0x04
 )
 
 
@@ -247,7 +248,7 @@ func decodeCellUpdate(data []byte) (*mines.UpdatedCell, error){
     }
     cell := &mines.UpdatedCell{
         X: bytesToInt(data[0:4]),
-        Y: bytesToInt(data[0:4]),
+        Y: bytesToInt(data[4:8]),
         Value: data[8]}
     return cell, nil
     
@@ -272,6 +273,39 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
         cells[i] = *cell
     }
     return cells, nil
+}
+
+func EncodeGameStart(params mines.GameParams) ([]byte, error) {
+    payloadLength := 3*4
+    var buf bytes.Buffer
+    buf.WriteByte(byte(Board))
+    buf.WriteByte(byte(0x00))
+    err := writeLength(&buf, payloadLength)
+    if err != nil {
+        return nil, err
+    }
+    payload := make([]byte, payloadLength)
+    copy(payload[0:4], intToBytes(params.Width))
+    copy(payload[4:8], intToBytes(params.Height))
+    copy(payload[8:12], intToBytes(params.Mines))
+    buf.Write(payload)
+    return buf.Bytes(), nil
+    
+}
+
+func DecodeGameStart(data []byte) (*mines.GameParams, error){
+    payloadLength, err := checkAndDecodeLength(data, Board)
+    if err != nil {
+        return nil, err
+    }
+    if payloadLength != 3*4 {
+        return nil, fmt.Errorf("decode game starte payload incorrect length (%d)", payloadLength)
+    }
+    payload := data[4:]
+    params := &mines.GameParams{Width: bytesToInt(payload[0:4]),
+                                Height: bytesToInt(payload[4:8]),
+                                Mines: bytesToInt(payload[8:12])}
+    return params, nil
 }
 
 

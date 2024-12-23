@@ -35,6 +35,12 @@ type Move struct {
     Type MoveType
 }
 
+type GameParams struct {
+    Width int
+    Height int
+    Mines int
+}
+
 func (move Move) String() string {
     msg := fmt.Sprintf("(%d, %d) ", move.X, move.Y)
     switch move.Type {
