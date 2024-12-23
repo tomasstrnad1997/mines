@@ -16,6 +16,7 @@ const (
     TextMessage = 0x02
     Board = 0x03
     StartGame = 0x04
+    CellUpdate = 0x05
 )
 
 
@@ -226,7 +227,7 @@ func encodeCellUpdate(cell mines.UpdatedCell) []byte {
 
 func EncodeCellUpdates(cells []mines.UpdatedCell) ([]byte, error) {
     var buf bytes.Buffer
-    buf.WriteByte(byte(Board))
+    buf.WriteByte(byte(CellUpdate))
     buf.WriteByte(byte(0x00))
     payloadLength := len(cells) * UpdateCellByteLength
     err := writeLength(&buf, payloadLength)
@@ -256,7 +257,7 @@ func decodeCellUpdate(data []byte) (*mines.UpdatedCell, error){
 
 func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
 
-    payloadLength, err := checkAndDecodeLength(data, Board)
+    payloadLength, err := checkAndDecodeLength(data, CellUpdate)
     if err != nil {
         return nil, err
     }
@@ -278,7 +279,7 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
 func EncodeGameStart(params mines.GameParams) ([]byte, error) {
     payloadLength := 3*4
     var buf bytes.Buffer
-    buf.WriteByte(byte(Board))
+    buf.WriteByte(byte(StartGame))
     buf.WriteByte(byte(0x00))
     err := writeLength(&buf, payloadLength)
     if err != nil {
@@ -294,7 +295,7 @@ func EncodeGameStart(params mines.GameParams) ([]byte, error) {
 }
 
 func DecodeGameStart(data []byte) (*mines.GameParams, error){
-    payloadLength, err := checkAndDecodeLength(data, Board)
+    payloadLength, err := checkAndDecodeLength(data, StartGame)
     if err != nil {
         return nil, err
     }

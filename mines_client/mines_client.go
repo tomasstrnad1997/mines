@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
 
 	"github.com/tomasstrnad1997/mines"
-	protocol "github.com/tomasstrnad1997/mines_protocol"
+	"github.com/tomasstrnad1997/mines_protocol"
 )
 
 func createClient() (*net.TCPConn, error){
@@ -27,15 +30,48 @@ func createClient() (*net.TCPConn, error){
 }
 
 func ReadServerResponse(client net.Conn){
+    reader := bufio.NewReader(client)
     for {
-        reply := make([]byte, 1024)
-        _, err := client.Read(reply)
-        if err != nil {
-            println("Lost connection to server")
+        header := make([]byte, 4)
+		bytesRead, err := reader.Read(header)
+		if err != nil  || bytesRead != 4{
+            fmt.Printf("Failed to read message\n")
             os.Exit(0)
+		}
+        messageLenght := int(binary.BigEndian.Uint16(header[2:4]))
+        message := make([]byte, messageLenght+4)
+        copy(message[0:4], header)
+        _, err = io.ReadFull(reader, message[4:])
+        if err != nil {
+            fmt.Printf("Error reading message\n")
+            continue
         }
-        print(string(reply))
+        protocol.HandleMessage(message)    
     }
+    
+}
+func RegisterHandlers(){
+    protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
+        updates, err := protocol.DecodeCellUpdates(bytes)
+        if err != nil{
+            return err
+        }
+        for _, cell := range updates {
+            var rep rune 
+            if (cell.Value & 0xF0) == 0{
+                rep = rune(cell.Value) + '0'
+            }else if cell.Value == mines.ShowFlag{
+                rep = 'F'
+            }else if cell.Value == mines.ShowMine{
+                rep = '?'
+            }else{
+                rep = 'U'
+            }
+            fmt.Printf("Move: %d, %d - %c\n", cell.X, cell.Y, rep)
+        }
+        return nil
+    })
+
 }
 
 func main() {
@@ -44,6 +80,7 @@ func main() {
         println(err.Error())
         os.Exit(1)
     }
+    RegisterHandlers()
     go ReadServerResponse(client)
 
     for {

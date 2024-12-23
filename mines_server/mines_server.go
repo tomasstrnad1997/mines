@@ -59,13 +59,13 @@ func handleRequest(player *Player){
     clients[player.id] = true
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
-    broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
+    // broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
 		if err != nil  || bytesRead != 4{
             fmt.Printf("Player %d disconnected \n", player.id)
-            broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
+            // broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
             players[player.id].connected = false
             clientsMux.Lock()
             clients[player.id] = false
@@ -93,7 +93,22 @@ func RegisterHandlers(board *mines.Board){
         if err != nil{
             return err
         }
-        board.MakeMove(*move)
+        updated, err := board.MakeMove(*move)
+        if err != nil {
+            return err
+        }
+        if len(updated.UpdatedCells) > 0 {
+            cells, err := mines.CreateUpdatedCells(board, updated.UpdatedCells)
+            if err != nil {
+                return err
+            }
+            encoded, err := protocol.EncodeCellUpdates(cells)
+            if err != nil{
+                return err
+            }
+            broadcast(encoded)
+        }
+        
         board.Print()
         return nil
     })
