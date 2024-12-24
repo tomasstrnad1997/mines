@@ -51,6 +51,17 @@ func ReadServerResponse(client net.Conn){
     
 }
 
+func createBoard(params mines.GameParams) *[][]rune {
+    board := make([][]rune, params.Width)
+    for i := range board {
+        board[i] = make([]rune, params.Height)
+        for j := 0; j < params.Height; j++{
+            board[i][j] = '#'
+        }
+    }
+    return &board
+}
+
 func printBoard(board *[][]rune){
     print("X")
     for i:=0; i < 10; i++{
@@ -66,7 +77,19 @@ func printBoard(board *[][]rune){
     }
 }
 
-func RegisterHandlers(board *[][]rune){
+func RegisterHandlers(){
+    var board *[][]rune 
+    protocol.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+        params, err := protocol.DecodeGameStart(bytes)
+        if err != nil{
+            return err
+        }
+        if params == nil {
+            println("ASD")
+        }
+        board = createBoard(*params)
+        return nil     
+    })
     protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
         updates, err := protocol.DecodeCellUpdates(bytes)
         if err != nil{
@@ -91,22 +114,15 @@ func RegisterHandlers(board *[][]rune){
     })
 
 }
+
 func main() {
     client, err := createClient()
-    board := make([][]rune, 10)
-    for i := range board {
-        board[i] = make([]rune, 10)
-        for j := 0; j < 10; j++{
-            board[i][j] = '#'
-        }
-    }
-        
-    
+
     if err != nil {
         println(err.Error())
         os.Exit(1)
     }
-    RegisterHandlers(&board)
+    RegisterHandlers()
     go ReadServerResponse(client)
 
     for {

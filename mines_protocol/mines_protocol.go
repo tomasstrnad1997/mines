@@ -17,6 +17,7 @@ const (
     Board = 0x03
     StartGame = 0x04
     CellUpdate = 0x05
+    RequestReload = 0x06
 )
 
 

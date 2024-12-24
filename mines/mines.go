@@ -19,6 +19,7 @@ type Cell struct
 type Board struct {
     Height int
     Width int
+    Mines int
     Cells [][]*Cell
 
 }
@@ -137,7 +138,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
     }
 
 
-    return &Board{width, height, cells}, nil
+    return &Board{width, height, mines, cells}, nil
 
 }
 
@@ -313,6 +314,19 @@ func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
     }
     return updates, nil
     
+}
+
+func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
+    updatedCells := []*Cell{}
+    for y := 0; y < board.Height; y++{
+        for x := 0; x < board.Width; x++{
+            cell := board.Cells[x][y]
+            if cell.Revealed || cell.Flagged {
+                updatedCells = append(updatedCells, cell)
+            }
+        }
+    }
+    return  CreateUpdatedCells(board, updatedCells)
 }
 
 func main() {

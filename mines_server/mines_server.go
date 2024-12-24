@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/tomasstrnad1997/mines"
-	"github.com/tomasstrnad1997/mines_protocol"
+	protocol "github.com/tomasstrnad1997/mines_protocol"
 )
 
 type Player struct{
@@ -53,12 +53,36 @@ func broadcast(data []byte) {
     }
 }
 
-func handleRequest(player *Player){
+func sendMessage(data []byte, player *Player) {
+    player.client.Write(data)
+}
+
+func sendInitialMessages(player *Player, board *mines.Board) (error) {
+    startMsg, err := protocol.EncodeGameStart(mines.GameParams{Width: board.Width, Height: board.Height, Mines: board.Mines})
+    if err != nil {
+        return err
+    }
+    sendMessage(startMsg, player)
+    cellUpdates, err := board.CreateCellUpdates()
+    if err != nil {
+        return err
+    }
+    updateMsg, err := protocol.EncodeCellUpdates(cellUpdates)
+    if err != nil {
+        return err
+    }
+    sendMessage(updateMsg, player)
+
+    return nil
+}
+
+func handleRequest(player *Player, board *mines.Board){
     reader := bufio.NewReader(player.client)
     clientsMux.Lock()
     clients[player.id] = true
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
+    sendInitialMessages(player, board)
     // broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, 4)
@@ -141,7 +165,7 @@ func RunGame(board *mines.Board){
         }
         player := &Player{conn, id, true}
         players[player.id] = player
-        go handleRequest(player)
+        go handleRequest(player, board)
         id++
     }
 
