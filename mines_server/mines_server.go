@@ -36,17 +36,16 @@ func StartNewGame(width, height, n_mines int) (*mines.Board, error){
 }
 
 func broadcastMessage(message string) {
-    for id := range players {
-        println(id)
-        if players[id].connected {
-            fmt.Fprintln(players[id].client, message)
-        }
+    encoded, err := protocol.EncodeTextMessage(message) 
+    if err != nil{
+        println("Failed to create message")
+        return
     }
+    broadcast(encoded)
 }
 
 func broadcast(data []byte) {
     for id := range players {
-        println(id)
         if players[id].connected {
             players[id].client.Write(data)
         }
@@ -83,13 +82,13 @@ func handleRequest(player *Player, board *mines.Board){
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
     sendInitialMessages(player, board)
-    // broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
+    broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
 		if err != nil  || bytesRead != 4{
             fmt.Printf("Player %d disconnected \n", player.id)
-            // broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
+            broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
             players[player.id].connected = false
             clientsMux.Lock()
             clients[player.id] = false

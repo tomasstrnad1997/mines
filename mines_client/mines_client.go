@@ -79,13 +79,18 @@ func printBoard(board *[][]rune){
 
 func RegisterHandlers(){
     var board *[][]rune 
+    protocol.RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
+        msg, err := protocol.DecodeTextMessage(bytes)
+        if err != nil{
+            return err
+        }
+        println(msg)
+        return nil     
+    })
     protocol.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
         params, err := protocol.DecodeGameStart(bytes)
         if err != nil{
             return err
-        }
-        if params == nil {
-            println("ASD")
         }
         board = createBoard(*params)
         return nil     

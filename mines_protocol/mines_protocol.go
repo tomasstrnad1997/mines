@@ -71,6 +71,28 @@ func writeLength(buf *bytes.Buffer, length int) error {
     return nil
 }
 
+func EncodeTextMessage(message string) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(TextMessage))
+    buf.WriteByte(byte(0x00))
+    payload := []byte(message)
+    err := writeLength(&buf, len(payload))
+    if err != nil {
+        return nil, err
+    }
+    buf.Write(payload)
+    return buf.Bytes(), nil
+}
+
+func DecodeTextMessage(data []byte) (string, error){
+    _, err := checkAndDecodeLength(data, TextMessage)
+    if err != nil {
+        return "", err
+    }
+    payload := data[4:]
+    return string(payload), nil
+}
+
 func EncodeMove(move mines.Move)([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(MoveCommand))
