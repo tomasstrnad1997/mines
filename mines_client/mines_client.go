@@ -107,9 +107,9 @@ func RegisterHandlers(){
             }else if cell.Value == mines.ShowFlag{
                 rep = 'F'
             }else if cell.Value == mines.ShowMine{
-                rep = '?'
+                rep = 'X'
             }else{
-                rep = 'U'
+                rep = '?'
             }
             (*board)[cell.X][cell.Y] = rep
             // fmt.Printf("Move: %d, %d - %c\n", cell.X, cell.Y, rep)

@@ -104,7 +104,10 @@ func handleRequest(player *Player, board *mines.Board){
             fmt.Printf("Error reading message")
             continue
         }
-        protocol.HandleMessage(message)    
+        err = protocol.HandleMessage(message)    
+        if err != nil {
+            println(err.Error())
+        }
 
 
 	}

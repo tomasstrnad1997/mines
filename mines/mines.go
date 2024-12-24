@@ -170,6 +170,7 @@ func (board *Board) Reveal(x, y int) (*MoveResult, error) {
         return &MoveResult{NoChange, nil}, nil
     }
     if cell.Mine {
+        cell.Revealed = true
         return &MoveResult{MineBlown, []*Cell{cell}}, nil
     }
     var updatedCells = []*Cell{}
