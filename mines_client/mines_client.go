@@ -79,6 +79,22 @@ func printBoard(board *[][]rune){
 
 func RegisterHandlers(){
     var board *[][]rune 
+    protocol.RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
+        endType, err := protocol.DecodeGameEnd(bytes)
+        if err != nil {
+            return err
+        }
+        switch endType {
+        case protocol.Win:
+            println("Game won")
+        case protocol.Loss:
+            println("Game lost")
+        case protocol.Aborted:
+            println("Game aborted")
+        }
+        board = nil
+        return nil
+    })
     protocol.RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
         msg, err := protocol.DecodeTextMessage(bytes)
         if err != nil{

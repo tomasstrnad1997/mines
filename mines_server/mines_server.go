@@ -150,10 +150,17 @@ func RegisterHandlers(server *Server){
         if err != nil {
             return err
         }
+        if server.gameRunning {
+            msg, err := protocol.EncodeGameEnd(protocol.Aborted)
+            if err != nil {
+                return err
+            }
+            broadcast(msg)
+        }
         return server.StartGame(*params)
     })
     protocol.RegisterHandler(protocol.MoveCommand, func(bytes []byte) error { 
-        if server.game == nil {
+        if !server.gameRunning  {
             return fmt.Errorf("Game is not running. Cannot accept moves")
         }
         board := server.game.board
@@ -176,14 +183,28 @@ func RegisterHandlers(server *Server){
             }
             broadcast(encoded)
         }
-        
+        var endMsg []byte
+        switch moveResult.Result {
+        case mines.MineBlown:
+            endMsg, err = protocol.EncodeGameEnd(protocol.Loss)
+        case mines.GameWon:
+            endMsg, err = protocol.EncodeGameEnd(protocol.Win)
+        default:
+            endMsg, err = nil, nil
+        }
+        if err != nil {
+            return err
+        }
+        if endMsg != nil {
+            broadcast(endMsg)
+            server.gameRunning = false
+        }
         board.Print()
         return nil
     })
 }
 
 func createServer() (*Server, error){
-    
     listener, err := net.Listen("tcp", "localhost:8080")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())

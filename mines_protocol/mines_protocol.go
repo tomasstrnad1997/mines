@@ -18,7 +18,7 @@ const (
     StartGame = 0x04
     CellUpdate = 0x05
     RequestReload = 0x06
-    GameEnd = -0x07
+    GameEnd = 0x07
 )
 
 type GameEndType byte
@@ -57,6 +57,7 @@ func HandleMessage(bytes []byte) error {
 	return handler(bytes)
 }
 
+//TODO: Do this differently on client or server side so it can access player data etc
 func RegisterHandler(msgType MessageType, handler MessageHandler) {
 	messageHandlers[msgType] = handler
 }
@@ -77,6 +78,27 @@ func writeLength(buf *bytes.Buffer, length int) error {
         return fmt.Errorf("Failed to write payload length (%d)", length)
     }
     return nil
+}
+
+func EncodeGameEnd(endType GameEndType) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(GameEnd))
+    buf.WriteByte(byte(0x00))
+    err := writeLength(&buf, 1)
+    if err != nil {
+        return nil, err
+    }
+    buf.WriteByte(byte(endType))
+    return buf.Bytes(), nil
+}
+
+func DecodeGameEnd(data []byte) (GameEndType, error){
+    _, err := checkAndDecodeLength(data, GameEnd)
+    if err != nil {
+        return 0, err
+    }
+    return GameEndType(data[4]), nil
+
 }
 
 func EncodeTextMessage(message string) ([]byte, error){
