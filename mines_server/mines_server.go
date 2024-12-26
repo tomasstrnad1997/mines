@@ -30,10 +30,12 @@ type Game struct {
     parameters mines.GameParams
 }
 
+type MessageHandler func(data []byte, source int) error
 type Server struct {
     server net.Listener
     game *Game
     gameRunning bool
+    handlers map[protocol.MessageType]MessageHandler
 }
 
 func StartNewGame(params mines.GameParams) (*Game, error){
@@ -51,7 +53,7 @@ func (server *Server) StartGame(params mines.GameParams) error{
         return err
     }
     server.game = game
-    broadcastMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
+    broadcastTextMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
 
     println("Starting a new game")
     startMsg, err := protocol.EncodeGameStart(params)
@@ -63,7 +65,7 @@ func (server *Server) StartGame(params mines.GameParams) error{
     return nil
 }
 
-func broadcastMessage(message string) {
+func broadcastTextMessage(message string) {
     encoded, err := protocol.EncodeTextMessage(message) 
     if err != nil{
         println("Failed to create message")
@@ -78,6 +80,14 @@ func broadcast(data []byte) {
             players[id].client.Write(data)
         }
     }
+}
+func sendTextMessage(msg string, player *Player) {
+    encoded, err := protocol.EncodeTextMessage(msg)
+    if err != nil {
+        println("Failed to create a message")
+        return
+    }
+    sendMessage(encoded, player)
 }
 
 func sendMessage(data []byte, player *Player) {
@@ -115,13 +125,13 @@ func handleRequest(player *Player, server *Server){
     if server.gameRunning {
         sendInitialMessages(player, server.game.board)
     }
-    broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
+    broadcastTextMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
 		if err != nil  || bytesRead != 4{
             fmt.Printf("Player %d disconnected \n", player.id)
-            broadcastMessage(fmt.Sprintf("Player %d disconnected", player.id))
+            broadcastTextMessage(fmt.Sprintf("Player %d disconnected", player.id))
             players[player.id].connected = false
             clientsMux.Lock()
             clients[player.id] = false
@@ -137,7 +147,7 @@ func handleRequest(player *Player, server *Server){
             fmt.Printf("Error reading message")
             continue
         }
-        err = protocol.HandleMessage(message)    
+        err = server.HandleMessage(message, player.id)    
         if err != nil {
             println(err.Error())
         }
@@ -145,8 +155,23 @@ func handleRequest(player *Player, server *Server){
 
 	}
 }
-func RegisterHandlers(server *Server){
-    protocol.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+func (server *Server) HandleMessage(data []byte, source int) error{
+    if data == nil || len(data) == 0 {
+        return fmt.Errorf("Cannot handle empty message")
+    }
+    msgType := protocol.MessageType(data[0])
+	handler, exists := server.handlers[msgType]
+	if !exists {
+		return fmt.Errorf("No handler registered for message type: %d", msgType)
+	}
+	return handler(data, source)
+}
+
+func (server *Server) registerHandler(msgType protocol.MessageType, handler MessageHandler){
+    server.handlers[msgType] = handler
+}
+func (server *Server) RegisterHandlers(){
+    server.registerHandler(protocol.StartGame, func(bytes []byte, source int) error { 
         params, err := protocol.DecodeGameStart(bytes)
         if err != nil {
             return err
@@ -158,11 +183,13 @@ func RegisterHandlers(server *Server){
             }
             broadcast(msg)
         }
+        broadcastTextMessage(fmt.Sprintf("Player %d requested new game", source))
         return server.StartGame(*params)
     })
-    protocol.RegisterHandler(protocol.MoveCommand, func(bytes []byte) error { 
+    server.registerHandler(protocol.MoveCommand, func(bytes []byte, source int) error { 
         if !server.gameRunning  {
-            return fmt.Errorf("Game is not running. Cannot accept moves")
+            sendTextMessage("Game not running. Cant make moves.", players[source])
+            return nil
         }
         board := server.game.board
         move, err := protocol.DecodeMove(bytes)
@@ -211,7 +238,8 @@ func createServer() (*Server, error){
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
     }
-    return &Server{listener, nil, false}, nil
+    messageHandlers := make(map[protocol.MessageType]MessageHandler)
+    return &Server{listener, nil, false, messageHandlers}, nil
 }
 
 func RunGame(){
@@ -220,7 +248,7 @@ func RunGame(){
     if err != nil {
         return 
     }
-    RegisterHandlers(server)
+    server.RegisterHandlers()
     fmt.Println("Server is running...")
     defer server.server.Close()
     for {
