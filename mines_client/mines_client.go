@@ -17,6 +17,21 @@ type BoardView struct {
     params mines.GameParams
 }
 
+type MessageHandler func([]byte) error
+var messageHandlers = make(map[protocol.MessageType]MessageHandler)
+func HandleMessage(bytes []byte) error {
+
+    msgType := protocol.MessageType(bytes[0])
+	handler, exists := messageHandlers[msgType]
+	if !exists {
+		return fmt.Errorf("No handler registered for message type: %d", msgType)
+	}
+	return handler(bytes)
+}
+
+func RegisterHandler(msgType protocol.MessageType, handler MessageHandler) {
+	messageHandlers[msgType] = handler
+}
 func createClient() (*net.TCPConn, error){
     servAddr := "localhost:8080"
     tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
@@ -40,7 +55,7 @@ func ReadServerResponse(client net.Conn){
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
         if err != nil {
-            fmt.Print("Lost connection to server")
+            fmt.Printf("Lost connection to server\n")
             os.Exit(0)
         }
 		if bytesRead != 4{
@@ -55,7 +70,7 @@ func ReadServerResponse(client net.Conn){
             fmt.Printf("Error reading message\n")
             continue
         }
-        protocol.HandleMessage(message)    
+        HandleMessage(message)    
     }
     
 }
@@ -88,7 +103,7 @@ func (board *BoardView) Print(){
 
 func RegisterHandlers(){
     var board *BoardView 
-    protocol.RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
+    RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
         endType, err := protocol.DecodeGameEnd(bytes)
         if err != nil {
             return err
@@ -104,7 +119,7 @@ func RegisterHandlers(){
         board = nil
         return nil
     })
-    protocol.RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
+    RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
         msg, err := protocol.DecodeTextMessage(bytes)
         if err != nil{
             return err
@@ -112,7 +127,7 @@ func RegisterHandlers(){
         println(msg)
         return nil     
     })
-    protocol.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+    RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
         params, err := protocol.DecodeGameStart(bytes)
         if err != nil{
             return err
@@ -121,7 +136,7 @@ func RegisterHandlers(){
         board.Print()
         return nil     
     })
-    protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
+    RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
         updates, err := protocol.DecodeCellUpdates(bytes)
         if err != nil{
             return err

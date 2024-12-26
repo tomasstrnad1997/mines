@@ -45,24 +45,6 @@ func checkAndDecodeLength(data []byte, message MessageType) (int, error){
     return payloadLength, nil
 }
 
-//TODO: Do this differently on client or server side so it can access player data etc
-type MessageHandler func([]byte) error
-var messageHandlers = make(map[MessageType]MessageHandler)
-func HandleMessage(bytes []byte) error {
-
-    msgType := MessageType(bytes[0])
-	handler, exists := messageHandlers[msgType]
-	if !exists {
-		return fmt.Errorf("No handler registered for message type: %d", msgType)
-	}
-	return handler(bytes)
-}
-
-func RegisterHandler(msgType MessageType, handler MessageHandler) {
-	messageHandlers[msgType] = handler
-}
-
-
 func intToBytes(i int) []byte{
     buf := make([]byte, 4)
     binary.BigEndian.PutUint32(buf, uint32(i))
@@ -362,23 +344,3 @@ func DecodeGameStart(data []byte) (*mines.GameParams, error){
     return params, nil
 }
 
-
-func main() {
-    RegisterHandler(MoveCommand, func(bytes []byte) error {
-        move, err := DecodeMove(bytes)
-        if err != nil{
-            return err
-        }
-        println((*move).String())
-        return nil
-
-    })
-    move := mines.Move{X:5, Y:5, Type:0x02} 
-    encoded, err := EncodeMove(move)
-    if err != nil{
-        println(err.Error())
-    }
-    mines.CreateBoard(10, 10, 10)
-    HandleMessage(encoded)
-
-}
