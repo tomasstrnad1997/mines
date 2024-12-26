@@ -39,7 +39,11 @@ func ReadServerResponse(client net.Conn){
     for {
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
-		if err != nil  || bytesRead != 4{
+        if err != nil {
+            fmt.Print("Lost connection to server")
+            os.Exit(0)
+        }
+		if bytesRead != 4{
             fmt.Printf("Failed to read message\n")
             os.Exit(0)
 		}

@@ -51,7 +51,8 @@ func (server *Server) StartGame(params mines.GameParams) error{
         return err
     }
     server.game = game
-    broadcastMessage("Starting a new game...")
+    broadcastMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
+
     println("Starting a new game")
     startMsg, err := protocol.EncodeGameStart(params)
     if err != nil {

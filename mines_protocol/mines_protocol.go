@@ -10,7 +10,6 @@ import (
 
 
 type MessageType byte
-type MessageHandler func([]byte) error
 const (
     MoveCommand MessageType = 0x01
     TextMessage = 0x02
@@ -31,7 +30,6 @@ const (
 
 
 
-var messageHandlers = make(map[MessageType]MessageHandler)
 
 func checkAndDecodeLength(data []byte, message MessageType) (int, error){
     if len(data) < 4 {
@@ -47,6 +45,9 @@ func checkAndDecodeLength(data []byte, message MessageType) (int, error){
     return payloadLength, nil
 }
 
+//TODO: Do this differently on client or server side so it can access player data etc
+type MessageHandler func([]byte) error
+var messageHandlers = make(map[MessageType]MessageHandler)
 func HandleMessage(bytes []byte) error {
 
     msgType := MessageType(bytes[0])
@@ -57,7 +58,6 @@ func HandleMessage(bytes []byte) error {
 	return handler(bytes)
 }
 
-//TODO: Do this differently on client or server side so it can access player data etc
 func RegisterHandler(msgType MessageType, handler MessageHandler) {
 	messageHandlers[msgType] = handler
 }
