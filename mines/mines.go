@@ -87,6 +87,7 @@ const (
     ShowCount byte = 0x00
     ShowMine  = 0x10
     ShowFlag = 0x20
+    Unflag = 0x30
 )
 
 type UpdatedCell struct{
@@ -322,7 +323,8 @@ func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
         } else if cell.Flagged {
             value = ShowFlag
         } else {
-            return nil, fmt.Errorf("Unknown update cell")
+            // Is not flagger nor revealed so it must be unflag
+            value = Unflag
         }
         updates[i] = UpdatedCell{X: cell.X, Y: cell.Y, Value:value}
     }

@@ -12,6 +12,11 @@ import (
 	"github.com/tomasstrnad1997/mines_protocol"
 )
 
+type BoardView struct {
+    board *[][]rune
+    params mines.GameParams
+}
+
 func createClient() (*net.TCPConn, error){
     servAddr := "localhost:8080"
     tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
@@ -51,7 +56,7 @@ func ReadServerResponse(client net.Conn){
     
 }
 
-func createBoard(params mines.GameParams) *[][]rune {
+func createBoard(params mines.GameParams) *BoardView {
     board := make([][]rune, params.Width)
     for i := range board {
         board[i] = make([]rune, params.Height)
@@ -59,26 +64,26 @@ func createBoard(params mines.GameParams) *[][]rune {
             board[i][j] = '#'
         }
     }
-    return &board
+    return &BoardView{&board, params}
 }
 
-func printBoard(board *[][]rune){
+func (board *BoardView) Print(){
     print("X")
     for i:=0; i < 10; i++{
         print(i % 10)
     }
     println()
-    for y := 0; y < 10; y++{
+    for y := 0; y < board.params.Height; y++{
         print(y % 10)
-        for x := 0; x < 10; x++{
-            fmt.Printf("%c",(*board)[x][y])
+        for x := 0; x < board.params.Width; x++{
+            fmt.Printf("%c",(*board.board)[x][y])
         }
         println()
     }
 }
 
 func RegisterHandlers(){
-    var board *[][]rune 
+    var board *BoardView 
     protocol.RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
         endType, err := protocol.DecodeGameEnd(bytes)
         if err != nil {
@@ -109,7 +114,7 @@ func RegisterHandlers(){
             return err
         }
         board = createBoard(*params)
-        printBoard(board)
+        board.Print()
         return nil     
     })
     protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
@@ -125,13 +130,15 @@ func RegisterHandlers(){
                 rep = 'F'
             }else if cell.Value == mines.ShowMine{
                 rep = 'X'
-            }else{
+            }else if cell.Value == mines.Unflag{
+                rep = '#'
+            }else {
                 rep = '?'
             }
-            (*board)[cell.X][cell.Y] = rep
+            (*board.board)[cell.X][cell.Y] = rep
             // fmt.Printf("Move: %d, %d - %c\n", cell.X, cell.Y, rep)
         }
-        printBoard(board)
+        board.Print()
         return nil
     })
 
