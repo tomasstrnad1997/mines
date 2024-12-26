@@ -18,6 +18,14 @@ const (
     StartGame = 0x04
     CellUpdate = 0x05
     RequestReload = 0x06
+    GameEnd = -0x07
+)
+
+type GameEndType byte
+const (
+    Win GameEndType = 0x01
+    Loss = 0x02
+    Aborted = 0x03
 )
 
 

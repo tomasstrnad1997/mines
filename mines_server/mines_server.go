@@ -25,14 +25,41 @@ var (
     boardMutex sync.RWMutex
 )
 
+type Game struct {
+    board *mines.Board
+    parameters mines.GameParams
+}
 
-func StartNewGame(width, height, n_mines int) (*mines.Board, error){
-    board, err := mines.CreateBoard(width, height, n_mines);
+type Server struct {
+    server net.Listener
+    game *Game
+    gameRunning bool
+}
+
+func StartNewGame(params mines.GameParams) (*Game, error){
+    board, err := mines.CreateBoardFromParams(params)
     if err != nil {
         fmt.Println(err)
         return nil, err
     }
-    return board, nil
+    return &Game{board, params}, nil
+}
+
+func (server *Server) StartGame(params mines.GameParams) error{
+    game, err := StartNewGame(params)
+    if err != nil {
+        return err
+    }
+    server.game = game
+    broadcastMessage("Starting a new game...")
+    println("Starting a new game")
+    startMsg, err := protocol.EncodeGameStart(params)
+    if err != nil {
+        return err
+    }
+    broadcast(startMsg)
+    server.gameRunning = true
+    return nil
 }
 
 func broadcastMessage(message string) {
@@ -57,6 +84,9 @@ func sendMessage(data []byte, player *Player) {
 }
 
 func sendInitialMessages(player *Player, board *mines.Board) (error) {
+    if board == nil {
+        return nil
+    }
     startMsg, err := protocol.EncodeGameStart(mines.GameParams{Width: board.Width, Height: board.Height, Mines: board.Mines})
     if err != nil {
         return err
@@ -75,13 +105,15 @@ func sendInitialMessages(player *Player, board *mines.Board) (error) {
     return nil
 }
 
-func handleRequest(player *Player, board *mines.Board){
+func handleRequest(player *Player, server *Server){
     reader := bufio.NewReader(player.client)
     clientsMux.Lock()
     clients[player.id] = true
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
-    sendInitialMessages(player, board)
+    if server.gameRunning {
+        sendInitialMessages(player, server.game.board)
+    }
     broadcastMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, 4)
@@ -112,19 +144,29 @@ func handleRequest(player *Player, board *mines.Board){
 
 	}
 }
-func RegisterHandlers(board *mines.Board){
-
+func RegisterHandlers(server *Server){
+    protocol.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+        params, err := protocol.DecodeGameStart(bytes)
+        if err != nil {
+            return err
+        }
+        return server.StartGame(*params)
+    })
     protocol.RegisterHandler(protocol.MoveCommand, func(bytes []byte) error { 
+        if server.game == nil {
+            return fmt.Errorf("Game is not running. Cannot accept moves")
+        }
+        board := server.game.board
         move, err := protocol.DecodeMove(bytes)
         if err != nil{
             return err
         }
-        updated, err := board.MakeMove(*move)
+        moveResult, err := board.MakeMove(*move)
         if err != nil {
             return err
         }
-        if len(updated.UpdatedCells) > 0 {
-            cells, err := mines.CreateUpdatedCells(board, updated.UpdatedCells)
+        if len(moveResult.UpdatedCells) > 0 {
+            cells, err := mines.CreateUpdatedCells(board, moveResult.UpdatedCells)
             if err != nil {
                 return err
             }
@@ -138,52 +180,41 @@ func RegisterHandlers(board *mines.Board){
         board.Print()
         return nil
     })
-
 }
 
-
-func createServer() (net.Listener, error){
+func createServer() (*Server, error){
     
     listener, err := net.Listen("tcp", "localhost:8080")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
     }
-    return listener, nil
+    return &Server{listener, nil, false}, nil
 }
 
-func RunGame(board *mines.Board){
+func RunGame(){
     id := 0
     server, err := createServer()
     if err != nil {
         return 
     }
-    defer server.Close()
+    RegisterHandlers(server)
+    fmt.Println("Server is running...")
+    defer server.server.Close()
     for {
-        conn, err := server.Accept()
+        conn, err := server.server.Accept()
         if err != nil {
             println(err)
             return
         }
         player := &Player{conn, id, true}
         players[player.id] = player
-        go handleRequest(player, board)
+        go handleRequest(player, server)
         id++
     }
-
-
 }
 
 
 func main() {
-    board, err := mines.CreateBoard(10, 10, 10);
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    RegisterHandlers(board)
-    fmt.Println("Server")
-    board.Print()
-
-    RunGame(board)
+    RunGame()
 }

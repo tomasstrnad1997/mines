@@ -93,6 +93,7 @@ func RegisterHandlers(){
             return err
         }
         board = createBoard(*params)
+        printBoard(board)
         return nil     
     })
     protocol.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
@@ -137,12 +138,20 @@ func main() {
         n, _ := fmt.Scanf("%d %d %c\n", &x, &y, &flag)
         var move mines.Move
         if n < 2 {
-            fmt.Errorf("Incorrect input")
+            fmt.Println("Incorrect input")
             continue
         }
         if flag == 'f' || flag == 'F' {
             move = mines.Move{X: x, Y: y, Type: mines.Flag}
             
+        }else if flag == 'G' {
+            encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: x, Height: x, Mines: y})
+            if err != nil {
+                println(err.Error())
+                continue
+            }
+            client.Write(encoded)
+            continue
         }else{
             move = mines.Move{X: x, Y: y, Type: mines.Reveal}
         }

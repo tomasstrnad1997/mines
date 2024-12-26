@@ -21,6 +21,7 @@ type Board struct {
     Width int
     Mines int
     Cells [][]*Cell
+    RevealedCells int 
 
 }
 
@@ -73,6 +74,7 @@ const (
     MineBlown
     CellRevealed
     Flagged
+    GameWon
 )
 
 type MoveResult struct {
@@ -111,6 +113,9 @@ func (e InvalidBoardParamsError) Error() string {
         return "Cannot construct board: unknown error"
     }
 }
+func CreateBoardFromParams(params GameParams) (*Board, error){
+    return CreateBoard(params.Width, params.Height, params.Mines)
+}
 
 func CreateBoard(width, height, mines int) (*Board, error) {
     if (width <= 0) || (height <= 0) || (mines < 0) || (mines > width * height) {
@@ -138,7 +143,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
     }
 
 
-    return &Board{width, height, mines, cells}, nil
+    return &Board{width, height, mines, cells, 0}, nil
 
 }
 
@@ -175,7 +180,15 @@ func (board *Board) Reveal(x, y int) (*MoveResult, error) {
     }
     var updatedCells = []*Cell{}
     updatedCells = Cascade(board, cell, updatedCells)
-    return &MoveResult{CellRevealed, updatedCells}, nil
+    board.RevealedCells += len(updatedCells)
+    var result MoveResultType
+    if board.RevealedCells + board.Mines == board.Width*board.Height {
+        result = GameWon
+    } else {
+        result = CellRevealed
+    }
+
+    return &MoveResult{result, updatedCells}, nil
 }
 
 func GetNeighbouringCells(board *Board, cell *Cell) []*Cell {
