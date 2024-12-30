@@ -56,26 +56,23 @@ func createClient(servAddr string) (*net.TCPConn, error){
     return conn, nil
 }
 
-func ReadServerResponse(client net.Conn){
+func ReadServerResponse(client net.Conn) error{
     reader := bufio.NewReader(client)
     for {
         header := make([]byte, 4)
 		bytesRead, err := reader.Read(header)
         if err != nil {
-            fmt.Printf("Lost connection to server\n")
-            os.Exit(0)
+            return fmt.Errorf("Lost connection to server\n")
         }
 		if bytesRead != 4{
-            fmt.Printf("Failed to read message\n")
-            os.Exit(0)
+            return fmt.Errorf("Failed to read message\n")
 		}
         messageLenght := int(binary.BigEndian.Uint16(header[2:4]))
         message := make([]byte, messageLenght+4)
         copy(message[0:4], header)
         _, err = io.ReadFull(reader, message[4:])
         if err != nil {
-            fmt.Printf("Error reading message\n")
-            continue
+            return err
         }
         HandleMessage(message)    
     }
@@ -331,7 +328,14 @@ func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
         }else{
             manager.server = client
             menu.state = GameStartMenu
-        go ReadServerResponse(client)
+            go func() {
+                err := ReadServerResponse(client)
+                if err != nil {
+                    println(err.Error())
+                }
+                menu.state = ConnectMenu
+                w.Invalidate()
+            }()
         }
         w.Invalidate()
         menu.connecting = false
