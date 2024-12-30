@@ -39,20 +39,19 @@ func HandleMessage(bytes []byte) error {
 func RegisterHandler(msgType protocol.MessageType, handler MessageHandler) {
 	messageHandlers[msgType] = handler
 }
-func createClient() (*net.TCPConn, error){
-    servAddr := "localhost:8080"
+func createClient(servAddr string) (*net.TCPConn, error){
     tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
     if err != nil {
         println("Reslove tpc failed:")
         return nil, err
     }
     conn, err := net.DialTCP("tcp", nil, tcpAddr)
-    println("RESOLVED TCP")
+    // println("RESOLVED TCP")
     if err != nil {
         println("Dial failed:")
         return nil, err
     }
-    println("DIALED TCP")
+    // println("DIALED TCP")
     return conn, nil
 }
 
@@ -171,7 +170,7 @@ func RegisterHandlers(){
 }
 
 func runTerminalClient() {
-    client, err := createClient()
+    client, err := createClient("localhost:8080")
 
     if err != nil {
         println(err.Error())
@@ -235,6 +234,10 @@ type Menu struct {
 
 }
 
+type GameManager struct {
+    server *net.TCPConn
+}
+
 
 func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -249,11 +252,12 @@ func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.
 				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Button(th, &menu.connectButton, "Connect").Layout(gtx)
+                btn :=  material.Button(th, &menu.connectButton, "Connect")
+                return btn.Layout(gtx) 
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if menu.connecting {
-					return material.Label(th, unit.Sp(16), "Connecting ...").Layout(gtx)
+					return material.Label(th, unit.Sp(16), fmt.Sprintf("Connecting to %s", menu.ipEditor.Text())).Layout(gtx)
 				}
 				return layout.Dimensions{}
 			}),
@@ -294,17 +298,25 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 
 func draw(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
+        manager := GameManager{}
         for {
             switch windowEvent := w.Event().(type){
             case app.FrameEvent:
                 gtx := app.NewContext(&ops, windowEvent)
-                if menu.connectButton.Clicked(gtx){
-                    fmt.Printf("Connecting to %s", menu.ipEditor.Text())
-                    if menu.connecting {
-                        menu.state = GameStartMenu
-                    }else{
+                if menu.connectButton.Clicked(gtx) && !menu.connecting{
+                    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
+                    go func() {
                         menu.connecting = true
-                    }
+                        client, err := createClient(menu.ipEditor.Text())
+                        if err != nil {
+                            println(err.Error())
+                        }else{
+                            manager.server = client
+                            menu.state = GameStartMenu
+                        }
+                        w.Invalidate()
+                        menu.connecting = false
+                    }()
                 }
                 switch menu.state {
                 case ConnectMenu:
@@ -327,6 +339,8 @@ func main() {
         menu := &Menu{
             state: ConnectMenu,
         }
+        menu.ipEditor.SetText("127.0.0.1:8080")
+        menu.ipEditor.SingleLine = true
         err := draw(w, th, menu)
         if err != nil {
             print(err.Error())
