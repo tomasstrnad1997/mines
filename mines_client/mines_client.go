@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 
 	"gioui.org/app"
 	"gioui.org/layout"
@@ -234,8 +235,18 @@ type Menu struct {
 
 }
 
+type Cell struct {
+	isMine     bool
+	isRevealed bool
+	isFlagged  bool
+	neighborMines int
+	clickable   widget.Clickable
+}
+
 type GameManager struct {
     server *net.TCPConn
+    grid [][]Cell
+    params mines.GameParams
 }
 
 
@@ -296,33 +307,118 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 	})
 }
 
+func drawGame(gtx layout.Context, th *material.Theme, manager *GameManager) layout.Dimensions {
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                return material.Label(th, unit.Sp(16), fmt.Sprintf("W: %d H: %d mines: %d", manager.params.Width, manager.params.Height, manager.params.Mines)).Layout(gtx)
+			}),
+        )
+    })
+}
+
+
+func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
+    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
+    go func() {
+        menu.connecting = true
+        client, err := createClient(menu.ipEditor.Text())
+        if err != nil {
+            println(err.Error())
+        }else{
+            manager.server = client
+            menu.state = GameStartMenu
+        go ReadServerResponse(client)
+        }
+        w.Invalidate()
+        menu.connecting = false
+    }()
+}
+func handleStartGameButton(menu *Menu, manager *GameManager){
+    width, errw := strconv.Atoi(menu.widthEditor.Text())
+    height, errh := strconv.Atoi(menu.heightEditor.Text())
+    nMines, errm := strconv.Atoi(menu.minesEditor.Text())
+    if errw != nil || errh != nil || errm != nil {
+    }else {
+        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines})
+        if err != nil {
+            println(err.Error())
+        }else{
+            manager.server.Write(encoded)
+        }
+    }
+}
+
+func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
+    RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
+        endType, err := protocol.DecodeGameEnd(bytes)
+        if err != nil {
+            return err
+        }
+        switch endType {
+        case protocol.Win:
+            println("Game won")
+        case protocol.Loss:
+            println("Game lost")
+        case protocol.Aborted:
+            println("Game aborted")
+        }
+        return nil
+    })
+    RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
+        msg, err := protocol.DecodeTextMessage(bytes)
+        if err != nil{
+            return err
+        }
+        println(msg)
+        return nil     
+    })
+    RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+        params, err := protocol.DecodeGameStart(bytes)
+        if err != nil{
+            return err
+        }
+        manager.params = *params
+        menu.state = GameScreen
+        w.Invalidate()
+        return nil     
+    })
+    RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
+        updates, err := protocol.DecodeCellUpdates(bytes)
+        if err != nil{
+            return err
+        }
+        for _, cell := range updates {
+            cell.X = cell.X + 0 
+        }
+        return nil
+    })
+
+}
 func draw(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
-        manager := GameManager{}
+        manager := &GameManager{}
+        RegisterGUIHandlers(w, manager, menu)
         for {
             switch windowEvent := w.Event().(type){
             case app.FrameEvent:
                 gtx := app.NewContext(&ops, windowEvent)
-                if menu.connectButton.Clicked(gtx) && !menu.connecting{
-                    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
-                    go func() {
-                        menu.connecting = true
-                        client, err := createClient(menu.ipEditor.Text())
-                        if err != nil {
-                            println(err.Error())
-                        }else{
-                            manager.server = client
-                            menu.state = GameStartMenu
-                        }
-                        w.Invalidate()
-                        menu.connecting = false
-                    }()
+                if menu.connectButton.Clicked(gtx){
+                    handleConnectButton(w, menu, manager)
+                }
+                if menu.startButton.Clicked(gtx) {
+                    handleStartGameButton(menu, manager)
                 }
                 switch menu.state {
                 case ConnectMenu:
                     drawConnectMenu(gtx, th, menu)
                 case GameStartMenu:
                     drawConfigMenu(gtx, th, menu)
+                case GameScreen:
+                    drawGame(gtx, th, manager)
                 }
                 windowEvent.Frame(gtx.Ops)
             case app.DestroyEvent:
@@ -341,6 +437,13 @@ func main() {
         }
         menu.ipEditor.SetText("127.0.0.1:8080")
         menu.ipEditor.SingleLine = true
+        menu.widthEditor.SetText("10")
+        menu.widthEditor.SingleLine = true
+        menu.heightEditor.SetText("10")
+        menu.heightEditor.SingleLine = true
+        menu.minesEditor.SetText("10")
+        menu.minesEditor.SingleLine = true
+
         err := draw(w, th, menu)
         if err != nil {
             print(err.Error())
