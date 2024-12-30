@@ -8,6 +8,13 @@ import (
 	"net"
 	"os"
 
+	"gioui.org/app"
+	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/unit"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
+
 	"github.com/tomasstrnad1997/mines"
 	"github.com/tomasstrnad1997/mines_protocol"
 )
@@ -163,7 +170,7 @@ func RegisterHandlers(){
 
 }
 
-func main() {
+func runTerminalClient() {
     client, err := createClient()
 
     if err != nil {
@@ -204,4 +211,127 @@ func main() {
         }
         client.Write(encoded)
     }   
+}
+
+type AppState int
+
+const (
+    ConnectMenu AppState = iota
+    GameStartMenu
+    GameScreen
+)
+
+type Menu struct {
+    ipEditor widget.Editor
+    connectButton widget.Clickable
+    connecting bool
+    
+    widthEditor widget.Editor
+    heightEditor widget.Editor
+    minesEditor widget.Editor
+    startButton widget.Clickable
+
+    state AppState
+
+}
+
+
+func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Editor(th, &menu.ipEditor, "Enter IP Address").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Button(th, &menu.connectButton, "Connect").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if menu.connecting {
+					return material.Label(th, unit.Sp(16), "Connecting ...").Layout(gtx)
+				}
+				return layout.Dimensions{}
+			}),
+		)
+	})
+}
+
+func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Editor(th, &menu.widthEditor, "Enter Width").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Spacer{Height: unit.Dp(8)}.Layout(gtx) // Add spacing
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Editor(th, &menu.heightEditor, "Enter Height").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Spacer{Height: unit.Dp(8)}.Layout(gtx) // Add spacing
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Editor(th, &menu.minesEditor, "Enter Number of Mines").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Button(th, &menu.startButton, "Start").Layout(gtx)
+			}),
+		)
+	})
+}
+
+func draw(w *app.Window, th *material.Theme, menu *Menu) error {
+        var ops op.Ops
+        for {
+            switch windowEvent := w.Event().(type){
+            case app.FrameEvent:
+                gtx := app.NewContext(&ops, windowEvent)
+                if menu.connectButton.Clicked(gtx){
+                    fmt.Printf("Connecting to %s", menu.ipEditor.Text())
+                    if menu.connecting {
+                        menu.state = GameStartMenu
+                    }else{
+                        menu.connecting = true
+                    }
+                }
+                switch menu.state {
+                case ConnectMenu:
+                    drawConnectMenu(gtx, th, menu)
+                case GameStartMenu:
+                    drawConfigMenu(gtx, th, menu)
+                }
+                windowEvent.Frame(gtx.Ops)
+            case app.DestroyEvent:
+                return windowEvent.Err
+            }
+        }
+}
+
+func main() {
+    go func() {
+        w := new(app.Window)
+        w.Option(app.Title("Minesweeper"))
+        th := material.NewTheme()
+        menu := &Menu{
+            state: ConnectMenu,
+        }
+        err := draw(w, th, menu)
+        if err != nil {
+            print(err.Error())
+        }
+        os.Exit(0)
+    }()
+    app.Main()
 }
