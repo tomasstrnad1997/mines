@@ -143,7 +143,6 @@ func CreateBoard(width, height, mines int) (*Board, error) {
         cells[position / width][position % height].Mine = true;
     }
 
-
     return &Board{width, height, mines, cells, 0}, nil
 
 }

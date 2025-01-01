@@ -304,18 +304,56 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 	})
 }
 
+func drawGrid(gtx layout.Context, th *material.Theme, manager *GameManager) layout.Dimensions {
+    rowChildren := make([]layout.FlexChild, manager.params.Height)
+    for i := 0; i < manager.params.Height; i++ {
+        rowIndex := i
+        rowChildren[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return drawRow(gtx, th, manager, rowIndex)
+        })
+    }
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx, rowChildren...)
+    })
+}
+
+func drawRow(gtx layout.Context, th *material.Theme, manager *GameManager, rowNumber int) layout.Dimensions {
+    colChildren := make([]layout.FlexChild, manager.params.Width)
+    for i := 0; i < manager.params.Width; i++ {
+        cell := manager.grid[rowNumber][i]
+        colChildren[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            text := ""
+            if cell.isRevealed {
+                text = strconv.Itoa(cell.neighborMines)
+            }
+            button := material.Button(th, &cell.clickable, text).Layout(gtx)
+            return button
+        })
+    }
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Horizontal,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx, colChildren...)
+    })
+}
+
 func drawGame(gtx layout.Context, th *material.Theme, manager *GameManager) layout.Dimensions {
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{
 			Axis:    layout.Vertical,
 			Spacing: layout.SpaceAround,
 		}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                return material.Label(th, unit.Sp(16), fmt.Sprintf("W: %d H: %d mines: %d", manager.params.Width, manager.params.Height, manager.params.Mines)).Layout(gtx)
-			}),
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return drawGrid(gtx, th, manager)
+        }),
         )
     })
 }
+
 
 
 func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
@@ -341,6 +379,7 @@ func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
         menu.connecting = false
     }()
 }
+
 func handleStartGameButton(menu *Menu, manager *GameManager){
     width, errw := strconv.Atoi(menu.widthEditor.Text())
     height, errh := strconv.Atoi(menu.heightEditor.Text())
@@ -354,6 +393,14 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
             manager.server.Write(encoded)
         }
     }
+}
+
+func intializeGrid(manager *GameManager) {
+    manager.grid = make([][]Cell, manager.params.Height)
+    for i := 0; i < manager.params.Height; i++ {
+        manager.grid[i] = make([]Cell, manager.params.Width)
+    }
+
 }
 
 func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
@@ -386,6 +433,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
             return err
         }
         manager.params = *params
+        intializeGrid(manager)
         menu.state = GameScreen
         w.Invalidate()
         return nil     
@@ -400,8 +448,8 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         }
         return nil
     })
-
 }
+
 func draw(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
         manager := &GameManager{}
