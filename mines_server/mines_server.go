@@ -94,16 +94,16 @@ func sendMessage(data []byte, player *Player) {
     player.client.Write(data)
 }
 
-func sendInitialMessages(player *Player, board *mines.Board) (error) {
-    if board == nil {
+func sendInitialMessages(player *Player, server *Server) (error) {
+    if server.game.board == nil {
         return nil
     }
-    startMsg, err := protocol.EncodeGameStart(mines.GameParams{Width: board.Width, Height: board.Height, Mines: board.Mines})
+    startMsg, err := protocol.EncodeGameStart(server.game.parameters)
     if err != nil {
         return err
     }
     sendMessage(startMsg, player)
-    cellUpdates, err := board.CreateCellUpdates()
+    cellUpdates, err := server.game.board.CreateCellUpdates()
     if err != nil {
         return err
     }
@@ -123,7 +123,7 @@ func handleRequest(player *Player, server *Server){
     clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
     if server.gameRunning {
-        sendInitialMessages(player, server.game.board)
+        sendInitialMessages(player, server)
     }
     broadcastTextMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
@@ -155,6 +155,7 @@ func handleRequest(player *Player, server *Server){
 
 	}
 }
+
 func (server *Server) HandleMessage(data []byte, source int) error{
     if data == nil || len(data) == 0 {
         return fmt.Errorf("Cannot handle empty message")
@@ -170,6 +171,7 @@ func (server *Server) HandleMessage(data []byte, source int) error{
 func (server *Server) registerHandler(msgType protocol.MessageType, handler MessageHandler){
     server.handlers[msgType] = handler
 }
+
 func (server *Server) RegisterHandlers(){
     server.registerHandler(protocol.StartGame, func(bytes []byte, source int) error { 
         params, err := protocol.DecodeGameStart(bytes)

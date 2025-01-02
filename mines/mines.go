@@ -335,7 +335,7 @@ func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
     updatedCells := []*Cell{}
     for y := 0; y < board.Height; y++{
         for x := 0; x < board.Width; x++{
-            cell := board.Cells[x][y]
+            cell := board.Cells[y][x]
             if cell.Revealed || cell.Flagged {
                 updatedCells = append(updatedCells, cell)
             }

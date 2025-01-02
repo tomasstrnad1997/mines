@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"image"
+	"image/color"
 	"io"
 	"net"
 	"os"
@@ -12,12 +14,14 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
 	"github.com/tomasstrnad1997/mines"
-	"github.com/tomasstrnad1997/mines_protocol"
+	protocol "github.com/tomasstrnad1997/mines_protocol"
 )
 
 type BoardView struct {
@@ -237,7 +241,7 @@ type Cell struct {
 	isRevealed bool
 	isFlagged  bool
 	neighborMines int
-	clickable   widget.Clickable
+	clickable   *widget.Clickable
 }
 
 type GameManager struct {
@@ -319,20 +323,44 @@ func drawGrid(gtx layout.Context, th *material.Theme, manager *GameManager) layo
 		}.Layout(gtx, rowChildren...)
     })
 }
+       
+func ColorBox(gtx layout.Context, size image.Point, color color.NRGBA) layout.Dimensions {
+	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
+    paint.ColorOp{Color: color}.Add(gtx.Ops)
+    paint.PaintOp{}.Add(gtx.Ops)
+    return layout.Dimensions{Size: size}
+}
 
 func drawRow(gtx layout.Context, th *material.Theme, manager *GameManager, rowNumber int) layout.Dimensions {
     colChildren := make([]layout.FlexChild, manager.params.Width)
     for i := 0; i < manager.params.Width; i++ {
         cell := manager.grid[rowNumber][i]
         colChildren[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-            text := ""
-            if cell.isRevealed {
-                text = strconv.Itoa(cell.neighborMines)
-            }
-            button := material.Button(th, &cell.clickable, text).Layout(gtx)
-            return button
+            return cell.clickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+
+                text := ""
+                black := color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0xFF}
+                button := material.Button(th, cell.clickable, text)
+                button.Color = black
+                button.CornerRadius = 0
+                gray := color.NRGBA{R: 0xE0, G: 0xE0, B: 0xE0, A: 0xFF}
+                if cell.isRevealed {
+                    if cell.neighborMines > 0 {
+                        button.Text = strconv.Itoa(cell.neighborMines)
+                    }
+                    button.Background = gray
+                }
+                return layout.Stack{}.Layout(gtx,
+                layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+                    return layout.Dimensions{Size: image.Point{X:75, Y:75}}
+                }),
+                layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+                    return button.Layout(gtx)
+                }))
+            })
         })
     }
+
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{
 			Axis:    layout.Horizontal,
@@ -354,7 +382,20 @@ func drawGame(gtx layout.Context, th *material.Theme, manager *GameManager) layo
     })
 }
 
-
+func handleCellClicks(gtx layout.Context, manager *GameManager) {
+    for row := 0; row < manager.params.Height; row++ {
+        for col := 0; col < manager.params.Width; col++ {
+            if manager.grid[row][col].clickable.Clicked(gtx){
+                encoded, err := protocol.EncodeMove(mines.Move{X: col, Y: row, Type: mines.Reveal})
+                if err != nil {
+                    println(err.Error())
+                    return
+                }
+                manager.server.Write(encoded)
+            }
+        }
+    }
+}
 
 func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
     fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
@@ -399,6 +440,9 @@ func intializeGrid(manager *GameManager) {
     manager.grid = make([][]Cell, manager.params.Height)
     for i := 0; i < manager.params.Height; i++ {
         manager.grid[i] = make([]Cell, manager.params.Width)
+        for j := 0; j < manager.params.Width; j++ {
+            manager.grid[i][j].clickable = &widget.Clickable{}
+        }
     }
 
 }
@@ -444,8 +488,15 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
             return err
         }
         for _, cell := range updates {
-            cell.X = cell.X + 0 
+            if (cell.Value & 0xF0) == 0{
+                manager.grid[cell.Y][cell.X].neighborMines = int(cell.Value)
+                manager.grid[cell.Y][cell.X].isRevealed = true
+                continue
+            }
+            switch cell.Value {
+            }
         }
+        w.Invalidate()
         return nil
     })
 }
@@ -470,7 +521,9 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
                 case GameStartMenu:
                     drawConfigMenu(gtx, th, menu)
                 case GameScreen:
-                    drawGame(gtx, th, manager)
+                    handleCellClicks(gtx, manager)
+                    drawGrid(gtx, th, manager)
+                    //drawGame(gtx, th, manager)
                 }
                 windowEvent.Frame(gtx.Ops)
             case app.DestroyEvent:
@@ -484,6 +537,7 @@ func main() {
         w := new(app.Window)
         w.Option(app.Title("Minesweeper"))
         th := material.NewTheme()
+
         menu := &Menu{
             state: ConnectMenu,
         }
