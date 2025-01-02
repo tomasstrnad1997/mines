@@ -12,6 +12,9 @@ import (
 	"strconv"
 
 	"gioui.org/app"
+	"gioui.org/io/event"
+	"gioui.org/io/input"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -78,7 +81,10 @@ func ReadServerResponse(client net.Conn) error{
         if err != nil {
             return err
         }
-        HandleMessage(message)    
+        err = HandleMessage(message)    
+        if err != nil {
+            println(err.Error())
+        }
     }
     
 }
@@ -236,18 +242,87 @@ type Menu struct {
 
 }
 
+type CutomButton struct {
+    
+}
 type Cell struct {
 	isMine     bool
 	isRevealed bool
 	isFlagged  bool
 	neighborMines int
-	clickable   *widget.Clickable
+    x int
+    y int
 }
+
 
 type GameManager struct {
     server *net.TCPConn
     grid [][]Cell
     params mines.GameParams
+}
+
+
+func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
+    cell_size := 75
+    size := image.Point{X:cell_size, Y:cell_size }
+    r := image.Rectangle{Max: size}
+    offset := image.Point{X: (2+cell_size)*cell.x, Y: (2+cell_size)*cell.y}
+    defer op.Offset(offset).Push(ops).Pop()
+    defer clip.Rect(r).Push(ops).Pop()
+    event.Op(ops, cell)
+    buttonPressed := 0
+	for {
+		ev, ok := q.Event(pointer.Filter{
+			Target: cell,
+			Kinds:  pointer.Press | pointer.Release,
+		})
+		if !ok {
+			break
+		}
+        if x, ok := ev.(pointer.Event); ok {
+            if x.Kind == pointer.Press {
+                if x.Buttons.Contain(pointer.ButtonPrimary) {
+                    buttonPressed = 1
+                }else if x.Buttons.Contain(pointer.ButtonSecondary) {
+                    buttonPressed = 2
+                }
+            }
+        }
+	}
+
+    var c color.NRGBA
+    if buttonPressed > 0 {
+        var mType mines.MoveType
+        if buttonPressed == 1 {
+            mType = mines.Reveal
+        } else {
+            mType = mines.Flag
+        }
+        encoded, err := protocol.EncodeMove(mines.Move{X: cell.x , Y: cell.y, Type: mType})
+        if err != nil {
+            println(err.Error())
+            return
+        }
+        manager.server.Write(encoded)
+    }
+    
+    text := ""
+    c = color.NRGBA{R: 0x30, G: 0x30, B: 0x30, A: 0xFF} 
+    if cell.isRevealed {
+        c = color.NRGBA{R: 0xAA, G: 0xAA, B: 0xAA, A: 0xFF} 
+        if cell.neighborMines > 0 {
+            text = strconv.Itoa(cell.neighborMines)
+        }
+        if cell.isMine {
+            text = "X"
+        }
+    }
+    if cell.isFlagged{
+        c = color.NRGBA{R: 0xAA, G: 0x00, B: 0x00, A: 0xFF} 
+    }
+    paint.ColorOp{Color: c}.Add(ops)
+    paint.PaintOp{}.Add(ops)
+    material.Label(th, 25, text).Layout(gtx)
 }
 
 
@@ -308,93 +383,13 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 	})
 }
 
-func drawGrid(gtx layout.Context, th *material.Theme, manager *GameManager) layout.Dimensions {
-    rowChildren := make([]layout.FlexChild, manager.params.Height)
-    for i := 0; i < manager.params.Height; i++ {
-        rowIndex := i
-        rowChildren[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-            return drawRow(gtx, th, manager, rowIndex)
-        })
-    }
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{
-			Axis:    layout.Vertical,
-			Spacing: layout.SpaceAround,
-		}.Layout(gtx, rowChildren...)
-    })
-}
-       
-func ColorBox(gtx layout.Context, size image.Point, color color.NRGBA) layout.Dimensions {
-	defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
-    paint.ColorOp{Color: color}.Add(gtx.Ops)
-    paint.PaintOp{}.Add(gtx.Ops)
-    return layout.Dimensions{Size: size}
-}
-
-func drawRow(gtx layout.Context, th *material.Theme, manager *GameManager, rowNumber int) layout.Dimensions {
-    colChildren := make([]layout.FlexChild, manager.params.Width)
-    for i := 0; i < manager.params.Width; i++ {
-        cell := manager.grid[rowNumber][i]
-        colChildren[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-            return cell.clickable.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-
-                text := ""
-                black := color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0xFF}
-                button := material.Button(th, cell.clickable, text)
-                button.Color = black
-                button.CornerRadius = 0
-                gray := color.NRGBA{R: 0xE0, G: 0xE0, B: 0xE0, A: 0xFF}
-                if cell.isRevealed {
-                    if cell.neighborMines > 0 {
-                        button.Text = strconv.Itoa(cell.neighborMines)
-                    }
-                    button.Background = gray
-                }
-                return layout.Stack{}.Layout(gtx,
-                layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-                    return layout.Dimensions{Size: image.Point{X:75, Y:75}}
-                }),
-                layout.Expanded(func(gtx layout.Context) layout.Dimensions {
-                    return button.Layout(gtx)
-                }))
-            })
-        })
-    }
-
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{
-			Axis:    layout.Horizontal,
-			Spacing: layout.SpaceAround,
-		}.Layout(gtx, colChildren...)
-    })
-}
-
-func drawGame(gtx layout.Context, th *material.Theme, manager *GameManager) layout.Dimensions {
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{
-			Axis:    layout.Vertical,
-			Spacing: layout.SpaceAround,
-		}.Layout(gtx,
-        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-            return drawGrid(gtx, th, manager)
-        }),
-        )
-    })
-}
-
-func handleCellClicks(gtx layout.Context, manager *GameManager) {
+func drawGame(manager *GameManager, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context){
     for row := 0; row < manager.params.Height; row++ {
         for col := 0; col < manager.params.Width; col++ {
-            if manager.grid[row][col].clickable.Clicked(gtx){
-                encoded, err := protocol.EncodeMove(mines.Move{X: col, Y: row, Type: mines.Reveal})
-                if err != nil {
-                    println(err.Error())
-                    return
-                }
-                manager.server.Write(encoded)
-            }
+            createCell(manager, &manager.grid[row][col], ops, q, th, gtx)
         }
     }
+    
 }
 
 func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
@@ -441,7 +436,8 @@ func intializeGrid(manager *GameManager) {
     for i := 0; i < manager.params.Height; i++ {
         manager.grid[i] = make([]Cell, manager.params.Width)
         for j := 0; j < manager.params.Width; j++ {
-            manager.grid[i][j].clickable = &widget.Clickable{}
+            manager.grid[i][j].x = j
+            manager.grid[i][j].y = i
         }
     }
 
@@ -488,12 +484,21 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
             return err
         }
         for _, cell := range updates {
+            c := &manager.grid[cell.Y][cell.X]
             if (cell.Value & 0xF0) == 0{
-                manager.grid[cell.Y][cell.X].neighborMines = int(cell.Value)
-                manager.grid[cell.Y][cell.X].isRevealed = true
+                c.neighborMines = int(cell.Value)
+                c.isRevealed = true
                 continue
             }
             switch cell.Value {
+            case mines.Unflag:
+                c.isFlagged = false
+            case mines.ShowFlag:
+                c.isFlagged = true
+            case mines.ShowMine:
+                c.isMine = true
+                c.isRevealed = true
+                
             }
         }
         w.Invalidate()
@@ -521,9 +526,7 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
                 case GameStartMenu:
                     drawConfigMenu(gtx, th, menu)
                 case GameScreen:
-                    handleCellClicks(gtx, manager)
-                    drawGrid(gtx, th, manager)
-                    //drawGame(gtx, th, manager)
+                    drawGame(manager, &ops, windowEvent.Source, th, gtx)
                 }
                 windowEvent.Frame(gtx.Ops)
             case app.DestroyEvent:

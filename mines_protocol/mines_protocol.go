@@ -298,7 +298,7 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
     }
     payload := data[4:]
     if payloadLength % UpdateCellByteLength != 0 {
-        return nil, fmt.Errorf("update cells payload length mismatch")
+        return nil, fmt.Errorf("update cells payload length mismatch %d", payloadLength)
     }
     cells := make([]mines.UpdatedCell, payloadLength / UpdateCellByteLength)
     for i:=0; i<payloadLength/UpdateCellByteLength; i++{

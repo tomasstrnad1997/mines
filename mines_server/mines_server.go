@@ -229,7 +229,6 @@ func (server *Server) RegisterHandlers(){
             broadcast(endMsg)
             server.gameRunning = false
         }
-        board.Print()
         return nil
     })
 }
