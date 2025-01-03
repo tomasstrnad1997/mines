@@ -401,7 +401,7 @@ func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
     fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
     go func() {
         menu.connecting = true
-        client, err := createClient(menu.ipEditor.Text())
+        client, err := createClient(menu.ipEditor.Text()+":42069")
         if err != nil {
             println(err.Error())
         }else{
@@ -549,7 +549,7 @@ func main() {
         menu := &Menu{
             state: ConnectMenu,
         }
-        menu.ipEditor.SetText("127.0.0.1:8080")
+        // menu.ipEditor.SetText("127.0.0.1:42069")
         menu.ipEditor.SingleLine = true
         menu.widthEditor.SetText("10")
         menu.widthEditor.SingleLine = true

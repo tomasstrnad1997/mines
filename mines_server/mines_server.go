@@ -234,7 +234,7 @@ func (server *Server) RegisterHandlers(){
 }
 
 func createServer() (*Server, error){
-    listener, err := net.Listen("tcp", "0.0.0.0:8080")
+    listener, err := net.Listen("tcp", "0.0.0.0:42069")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
