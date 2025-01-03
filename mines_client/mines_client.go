@@ -306,15 +306,15 @@ func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, t
         manager.server.Write(encoded)
     }
     
-    text := ""
+    mark := ""
     c = color.NRGBA{R: 0x30, G: 0x30, B: 0x30, A: 0xFF} 
     if cell.isRevealed {
         c = color.NRGBA{R: 0xAA, G: 0xAA, B: 0xAA, A: 0xFF} 
         if cell.neighborMines > 0 {
-            text = strconv.Itoa(cell.neighborMines)
+            mark = strconv.Itoa(cell.neighborMines)
         }
         if cell.isMine {
-            text = "X"
+            mark = "X"
         }
     }
     if cell.isFlagged{
@@ -322,9 +322,14 @@ func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, t
     }
     paint.ColorOp{Color: c}.Add(ops)
     paint.PaintOp{}.Add(ops)
-    material.Label(th, 25, text).Layout(gtx)
+    drawMark(mark, ops, th, gtx)
+    
 }
-
+func drawMark(mark string, ops *op.Ops, th *material.Theme, gtx layout.Context) {
+    offset := image.Point{X:23, Y:10}
+    defer op.Offset(offset).Push(ops).Pop()
+    material.Label(th, unit.Sp(25), mark).Layout(gtx)
+}
 
 func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
