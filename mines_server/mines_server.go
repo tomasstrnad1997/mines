@@ -139,7 +139,7 @@ func handleRequest(player *Player, server *Server){
 			player.client.Close()
 			return
 		}
-        messageLenght := int(binary.BigEndian.Uint16(header[2:protocol.HeaderLength]))
+        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
         message := make([]byte, messageLenght+protocol.HeaderLength)
         copy(message[0:protocol.HeaderLength], header)
         _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
