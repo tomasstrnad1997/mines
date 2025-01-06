@@ -66,18 +66,18 @@ func createClient(servAddr string) (*net.TCPConn, error){
 func ReadServerResponse(client net.Conn) error{
     reader := bufio.NewReader(client)
     for {
-        header := make([]byte, 4)
+        header := make([]byte, protocol.HeaderLength)
 		bytesRead, err := reader.Read(header)
         if err != nil {
             return fmt.Errorf("Lost connection to server\n")
         }
-		if bytesRead != 4{
+		if bytesRead != protocol.HeaderLength{
             return fmt.Errorf("Failed to read message\n")
 		}
-        messageLenght := int(binary.BigEndian.Uint16(header[2:4]))
-        message := make([]byte, messageLenght+4)
-        copy(message[0:4], header)
-        _, err = io.ReadFull(reader, message[4:])
+        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
+        message := make([]byte, messageLenght+protocol.HeaderLength)
+        copy(message[0:protocol.HeaderLength], header)
+        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
         if err != nil {
             return err
         }

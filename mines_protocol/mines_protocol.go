@@ -27,19 +27,23 @@ const (
     Aborted = 0x03
 )
 
-
+const (
+    HeaderLength = 6
+    CellByteLength = 9
+    UpdateCellByteLength = 9
+)
 
 
 
 func checkAndDecodeLength(data []byte, message MessageType) (int, error){
-    if len(data) < 4 {
+    if len(data) < HeaderLength {
         return 0, fmt.Errorf("Data too short to decode")
     }
     if MessageType(data[0]) != message {
         return 0, fmt.Errorf("Invalid message type for command")
     }
-    payloadLength := int(binary.BigEndian.Uint16(data[2:4]))
-    if payloadLength != len(data) - 4 {
+    payloadLength := int(binary.BigEndian.Uint32(data[2:6]))
+    if payloadLength != len(data) - HeaderLength {
         return payloadLength, fmt.Errorf("Payload size is invalid") // TODO: make a custom error 
     }
     return payloadLength, nil
@@ -55,7 +59,7 @@ func bytesToInt(bytes []byte) int{
 }
 
 func writeLength(buf *bytes.Buffer, length int) error {
-    err := binary.Write(buf, binary.BigEndian, uint16(length))
+    err := binary.Write(buf, binary.BigEndian, uint32(length))
     if err != nil {
         return fmt.Errorf("Failed to write payload length (%d)", length)
     }
@@ -79,7 +83,7 @@ func DecodeGameEnd(data []byte) (GameEndType, error){
     if err != nil {
         return 0, err
     }
-    return GameEndType(data[4]), nil
+    return GameEndType(data[HeaderLength]), nil
 
 }
 
@@ -101,7 +105,7 @@ func DecodeTextMessage(data []byte) (string, error){
     if err != nil {
         return "", err
     }
-    payload := data[4:]
+    payload := data[HeaderLength:]
     return string(payload), nil
 }
 
@@ -129,7 +133,7 @@ func DecodeMove(data []byte) (move* mines.Move, err error){
         return nil, err
     }
     move = &mines.Move{}
-    payload := data[4:]
+    payload := data[HeaderLength:]
     move.Type = mines.MoveType(payload[0])
     move.X = bytesToInt(payload[1:5])
     move.Y = bytesToInt(payload[5:9])
@@ -203,17 +207,12 @@ func EncodeBoard(board *mines.Board) ([]byte, error){
 
 }
 
-const (
-    CellByteLength = 9
-    UpdateCellByteLength = 9
-)
-
 func DecodeBoard(data []byte) (*mines.Board, error){
     _, err := checkAndDecodeLength(data, Board)
     if err != nil {
         return nil, err
     }
-    payload := data[4:]
+    payload := data[HeaderLength:]
     
     if len(payload) < 8 {
         return nil, fmt.Errorf("payload too short to contain board dimensions")
@@ -296,7 +295,7 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
     if err != nil {
         return nil, err
     }
-    payload := data[4:]
+    payload := data[HeaderLength:]
     if payloadLength % UpdateCellByteLength != 0 {
         return nil, fmt.Errorf("update cells payload length mismatch %d", payloadLength)
     }
@@ -337,7 +336,7 @@ func DecodeGameStart(data []byte) (*mines.GameParams, error){
     if payloadLength != 3*4 {
         return nil, fmt.Errorf("decode game starte payload incorrect length (%d)", payloadLength)
     }
-    payload := data[4:]
+    payload := data[HeaderLength:]
     params := &mines.GameParams{Width: bytesToInt(payload[0:4]),
                                 Height: bytesToInt(payload[4:8]),
                                 Mines: bytesToInt(payload[8:12])}

@@ -127,9 +127,9 @@ func handleRequest(player *Player, server *Server){
     }
     broadcastTextMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
-        header := make([]byte, 4)
+        header := make([]byte, protocol.HeaderLength)
 		bytesRead, err := reader.Read(header)
-		if err != nil  || bytesRead != 4{
+		if err != nil  || bytesRead != protocol.HeaderLength{
             fmt.Printf("Player %d disconnected \n", player.id)
             broadcastTextMessage(fmt.Sprintf("Player %d disconnected", player.id))
             players[player.id].connected = false
@@ -139,10 +139,10 @@ func handleRequest(player *Player, server *Server){
 			player.client.Close()
 			return
 		}
-        messageLenght := int(binary.BigEndian.Uint16(header[2:4]))
-        message := make([]byte, messageLenght+4)
-        copy(message[0:4], header)
-        _, err = io.ReadFull(reader, message[4:])
+        messageLenght := int(binary.BigEndian.Uint16(header[2:protocol.HeaderLength]))
+        message := make([]byte, messageLenght+protocol.HeaderLength)
+        copy(message[0:protocol.HeaderLength], header)
+        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
         if err != nil {
             fmt.Printf("Error reading message")
             continue
@@ -157,7 +157,7 @@ func handleRequest(player *Player, server *Server){
 }
 
 func (server *Server) HandleMessage(data []byte, source int) error{
-    if data == nil || len(data) == 0 {
+    if data == nil {
         return fmt.Errorf("Cannot handle empty message")
     }
     msgType := protocol.MessageType(data[0])
