@@ -17,8 +17,8 @@ type Cell struct
 }
 
 type Board struct {
-    Height int
     Width int
+    Height int
     Mines int
     Cells [][]*Cell
     RevealedCells int 
@@ -114,6 +114,7 @@ func (e InvalidBoardParamsError) Error() string {
         return "Cannot construct board: unknown error"
     }
 }
+
 func CreateBoardFromParams(params GameParams) (*Board, error){
     return CreateBoard(params.Width, params.Height, params.Mines)
 }
@@ -140,7 +141,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
         mines_position[i], mines_position[j] = mines_position[j], mines_position[i]
     })
     for _, position := range mines_position[:mines]{
-        cells[position / width][position % height].Mine = true;
+        cells[position % width][position / height].Mine = true;
     }
 
     return &Board{width, height, mines, cells, 0}, nil
@@ -336,7 +337,7 @@ func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
     updatedCells := []*Cell{}
     for y := 0; y < board.Height; y++{
         for x := 0; x < board.Width; x++{
-            cell := board.Cells[y][x]
+            cell := board.Cells[x][y]
             if cell.Revealed || cell.Flagged {
                 updatedCells = append(updatedCells, cell)
             }
