@@ -263,7 +263,7 @@ type GameManager struct {
 
 
 func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
-    cell_size := 75
+    cell_size := int(gtx.Metric.PxPerDp*25)
     size := image.Point{X:cell_size, Y:cell_size }
     r := image.Rectangle{Max: size}
     offset := image.Point{X: (2+cell_size)*cell.x, Y: (2+cell_size)*cell.y}
@@ -326,9 +326,11 @@ func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, t
     
 }
 func drawMark(mark string, ops *op.Ops, th *material.Theme, gtx layout.Context) {
-    offset := image.Point{X:23, Y:10}
+    cell_size := int(gtx.Metric.PxPerDp*25)
+    offset := image.Point{X:cell_size/4, Y:cell_size/8}
     defer op.Offset(offset).Push(ops).Pop()
-    material.Label(th, unit.Sp(25), mark).Layout(gtx)
+    material.Label(th, unit.Sp(18), mark).Layout(gtx)
+    
 }
 
 func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
