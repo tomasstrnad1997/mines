@@ -232,11 +232,15 @@ type Menu struct {
     ipEditor widget.Editor
     connectButton widget.Clickable
     connecting bool
+    gameEndResult protocol.GameEndType
     
     widthEditor widget.Editor
     heightEditor widget.Editor
     minesEditor widget.Editor
     startButton widget.Clickable
+
+    restartButton widget.Clickable
+    newGameButton widget.Clickable
 
     state AppState
 
@@ -325,6 +329,7 @@ func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, t
     drawMark(mark, ops, th, gtx)
     
 }
+
 func drawMark(mark string, ops *op.Ops, th *material.Theme, gtx layout.Context) {
     cell_size := int(gtx.Metric.PxPerDp*25)
     offset := image.Point{X:cell_size/4, Y:cell_size/8}
@@ -391,12 +396,42 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 }
 
 func drawGame(manager *GameManager, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context){
-    for row := 0; row < manager.params.Height; row++ {
-        for col := 0; col < manager.params.Width; col++ {
-            createCell(manager, &manager.grid[row][col], ops, q, th, gtx)
+    for col := 0; col < manager.params.Width; col++ {
+        for row := 0; row < manager.params.Height; row++ {
+            createCell(manager, &manager.grid[col][row], ops, q, th, gtx)
         }
     }
     
+}
+
+func drawEndGame(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions{
+    var txt string
+    switch menu.gameEndResult {
+    case protocol.Aborted:
+        txt = "Aborted"
+    case protocol.Win:
+        txt = "Game won"
+    case protocol.Loss:
+        txt = "Game lost"
+    default:
+        return layout.Dimensions{}
+    }
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                return material.Label(th, unit.Sp(100), txt).Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Button(th, &menu.restartButton, "Restart").Layout(gtx)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Button(th, &menu.newGameButton, "New game").Layout(gtx)
+			}),
+		)
+	})
 }
 
 func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
@@ -439,12 +474,12 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
 }
 
 func intializeGrid(manager *GameManager) {
-    manager.grid = make([][]Cell, manager.params.Height)
-    for i := 0; i < manager.params.Height; i++ {
-        manager.grid[i] = make([]Cell, manager.params.Width)
-        for j := 0; j < manager.params.Width; j++ {
-            manager.grid[i][j].x = j
-            manager.grid[i][j].y = i
+    manager.grid = make([][]Cell, manager.params.Width)
+    for i := 0; i < manager.params.Width; i++ {
+        manager.grid[i] = make([]Cell, manager.params.Height)
+        for j := 0; j < manager.params.Height; j++ {
+            manager.grid[i][j].x = i
+            manager.grid[i][j].y = j
         }
     }
 
@@ -456,14 +491,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         if err != nil {
             return err
         }
-        switch endType {
-        case protocol.Win:
-            println("Game won")
-        case protocol.Loss:
-            println("Game lost")
-        case protocol.Aborted:
-            println("Game aborted")
-        }
+        menu.gameEndResult = endType
         return nil
     })
     RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
@@ -482,6 +510,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         manager.params = *params
         intializeGrid(manager)
         menu.state = GameScreen
+        menu.gameEndResult = 0
         w.Invalidate()
         return nil     
     })
@@ -491,7 +520,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
             return err
         }
         for _, cell := range updates {
-            c := &manager.grid[cell.Y][cell.X]
+            c := &manager.grid[cell.X][cell.Y]
             if (cell.Value & 0xF0) == 0{
                 c.neighborMines = int(cell.Value)
                 c.isRevealed = true
@@ -513,6 +542,19 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
     })
 }
 
+func handleRestartButton(manager *GameManager) {
+    encoded, err := protocol.EncodeGameStart(manager.params)
+    if err != nil {
+        println(err.Error())
+    }else{
+        manager.server.Write(encoded)
+    }
+}
+
+func handleNEwGameButton(menu *Menu) {
+    menu.state = GameStartMenu
+}
+
 func draw(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
         manager := &GameManager{}
@@ -527,6 +569,12 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
                 if menu.startButton.Clicked(gtx) {
                     handleStartGameButton(menu, manager)
                 }
+                if menu.restartButton.Clicked(gtx){
+                    handleRestartButton(manager)
+                }
+                if menu.newGameButton.Clicked(gtx){
+                    handleNEwGameButton(menu)
+                }
                 switch menu.state {
                 case ConnectMenu:
                     drawConnectMenu(gtx, th, menu)
@@ -534,6 +582,7 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
                     drawConfigMenu(gtx, th, menu)
                 case GameScreen:
                     drawGame(manager, &ops, windowEvent.Source, th, gtx)
+                    drawEndGame(gtx, th, menu)
                 }
                 windowEvent.Frame(gtx.Ops)
             case app.DestroyEvent:
@@ -555,9 +604,9 @@ func main() {
         menu.ipEditor.SingleLine = true
         menu.widthEditor.SetText("10")
         menu.widthEditor.SingleLine = true
-        menu.heightEditor.SetText("10")
+        menu.heightEditor.SetText("20")
         menu.heightEditor.SingleLine = true
-        menu.minesEditor.SetText("10")
+        menu.minesEditor.SetText("9")
         menu.minesEditor.SingleLine = true
 
         err := draw(w, th, menu)
