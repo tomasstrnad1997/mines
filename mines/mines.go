@@ -162,8 +162,9 @@ func Cascade(board *Board, cell *Cell, updatedCells []*Cell) ([]*Cell){
     }
     return updatedCells
 }
+
 func ValidCellIndex(board *Board, x, y int) bool {
-    return !(x < 0 || x >= board.Width || y >= board.Height || y < 0)
+    return (x >= 0) && (x < board.Width) && (y >= 0) && (y < board.Height) 
 }
 
 func (board *Board) Reveal(x, y int) (*MoveResult, error) {
