@@ -271,7 +271,7 @@ func EncodeCellUpdates(cells []mines.UpdatedCell) ([]byte, error) {
     for _, cell := range cells {
         buf.Write(encodeCellUpdate(cell))
     }
-    if payloadLength + 4 != buf.Len(){
+    if payloadLength + HeaderLength != buf.Len(){
         return nil, fmt.Errorf("Incorrect payload length while encoding cell updates")
     }
     return buf.Bytes(), nil
