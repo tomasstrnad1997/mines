@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 
 	"gioui.org/app"
 	"gioui.org/io/event"
@@ -228,6 +229,10 @@ const (
     GameScreen
 )
 
+var (
+    boardMutex sync.Mutex
+)
+
 type Menu struct {
     ipEditor widget.Editor
     connectButton widget.Clickable
@@ -246,9 +251,6 @@ type Menu struct {
 
 }
 
-type CutomButton struct {
-    
-}
 type Cell struct {
 	isMine     bool
 	isRevealed bool
@@ -265,12 +267,15 @@ type GameManager struct {
     params mines.GameParams
 }
 
+const (
+    cellSpacing int = 2 
+)
 
-func createCell(manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
-    cell_size := int(gtx.Metric.PxPerDp*25)
+
+func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
     size := image.Point{X:cell_size, Y:cell_size }
     r := image.Rectangle{Max: size}
-    offset := image.Point{X: (2+cell_size)*cell.x, Y: (2+cell_size)*cell.y}
+    offset := image.Point{X: (cellSpacing+cell_size)*cell.x, Y: (cellSpacing+cell_size)*cell.y}
     defer op.Offset(offset).Push(ops).Pop()
     defer clip.Rect(r).Push(ops).Pop()
     event.Op(ops, cell)
@@ -395,13 +400,35 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 	})
 }
 
-func drawGame(manager *GameManager, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context){
+func drawBoard(manager *GameManager, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context) layout.Dimensions{
+    cellSize := int(gtx.Metric.PxPerDp * 25)
+    totalWidth := manager.params.Width*cellSize + (manager.params.Width-1)*cellSpacing
+    totalHeight := manager.params.Height*cellSize + (manager.params.Height-1)*cellSpacing
+    offset := image.Point{X: 10, Y: 10}
+    defer op.Offset(offset).Push(ops).Pop()
+    boardMutex.Lock()
     for col := 0; col < manager.params.Width; col++ {
         for row := 0; row < manager.params.Height; row++ {
-            createCell(manager, &manager.grid[col][row], ops, q, th, gtx)
+            createCell(cellSize, manager, &manager.grid[col][row], ops, q, th, gtx)
         }
     }
-    
+    boardMutex.Unlock()
+    return layout.Dimensions{
+        Size: image.Point{X: totalWidth + offset.X*2, Y: totalHeight + offset.Y*2},
+    }   
+}
+
+func drawGameScreen(manager *GameManager, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context) layout.Dimensions{
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{
+			Axis:    layout.Vertical,
+			Spacing: layout.SpaceAround,
+		}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                return drawBoard(manager, ops, q, th, gtx)
+			}),
+		)
+	})
 }
 
 func drawEndGame(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions{
@@ -416,22 +443,29 @@ func drawEndGame(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dime
     default:
         return layout.Dimensions{}
     }
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{
-			Axis:    layout.Vertical,
-			Spacing: layout.SpaceAround,
-		}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                return material.Label(th, unit.Sp(100), txt).Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Button(th, &menu.restartButton, "Restart").Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Button(th, &menu.newGameButton, "New game").Layout(gtx)
-			}),
-		)
-	})
+    return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+        return layout.Flex{
+            Axis:    layout.Vertical,
+            Spacing: layout.SpaceAround,
+            Alignment: layout.Middle,
+        }.Layout(gtx,
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return material.Label(th, unit.Sp(100), txt).Layout(gtx)
+        }),
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx)
+        }),
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return material.Button(th, &menu.restartButton, "Restart").Layout(gtx)
+        }),
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx)
+        }),
+        layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+            return material.Button(th, &menu.newGameButton, "New game").Layout(gtx)
+        }),
+    )
+})
 }
 
 func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
@@ -473,7 +507,8 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
     }
 }
 
-func intializeGrid(manager *GameManager) {
+func initializeGrid(manager *GameManager) {
+    boardMutex.Lock()
     manager.grid = make([][]Cell, manager.params.Width)
     for i := 0; i < manager.params.Width; i++ {
         manager.grid[i] = make([]Cell, manager.params.Height)
@@ -482,6 +517,7 @@ func intializeGrid(manager *GameManager) {
             manager.grid[i][j].y = j
         }
     }
+    boardMutex.Unlock()
 
 }
 
@@ -508,7 +544,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
             return err
         }
         manager.params = *params
-        intializeGrid(manager)
+        initializeGrid(manager)
         menu.state = GameScreen
         menu.gameEndResult = 0
         w.Invalidate()
@@ -581,7 +617,7 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
                 case GameStartMenu:
                     drawConfigMenu(gtx, th, menu)
                 case GameScreen:
-                    drawGame(manager, &ops, windowEvent.Source, th, gtx)
+                    drawGameScreen(manager, &ops, windowEvent.Source, th, gtx)
                     drawEndGame(gtx, th, menu)
                 }
                 windowEvent.Frame(gtx.Ops)
