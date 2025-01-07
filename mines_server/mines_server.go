@@ -22,7 +22,6 @@ var (
     clients = make(map[int]bool)
     players = make(map[int]*Player)
     clientsMux sync.Mutex
-    boardMutex sync.RWMutex
 )
 
 type Game struct {
@@ -31,11 +30,17 @@ type Game struct {
 }
 
 type MessageHandler func(data []byte, source int) error
+
+type command struct {
+    message []byte
+    player *Player
+}
 type Server struct {
     server net.Listener
     game *Game
     gameRunning bool
     handlers map[protocol.MessageType]MessageHandler
+    messageChannel chan command
 }
 
 func StartNewGame(params mines.GameParams) (*Game, error){
@@ -147,12 +152,7 @@ func handleRequest(player *Player, server *Server){
             fmt.Printf("Error reading message")
             continue
         }
-        err = server.HandleMessage(message, player.id)    
-        if err != nil {
-            println(err.Error())
-        }
-
-
+        server.messageChannel <- command{message, player}
 	}
 }
 
@@ -233,6 +233,16 @@ func (server *Server) RegisterHandlers(){
     })
 }
 
+func (server *Server) manageCommands(){
+    for command := range server.messageChannel{
+        err := server.HandleMessage(command.message, command.player.id)
+        if err != nil {
+            println(err.Error())
+        }
+
+    }
+}
+
 func createServer() (*Server, error){
     listener, err := net.Listen("tcp", "0.0.0.0:42069")
     if err != nil {
@@ -240,7 +250,8 @@ func createServer() (*Server, error){
         return nil, err
     }
     messageHandlers := make(map[protocol.MessageType]MessageHandler)
-    return &Server{listener, nil, false, messageHandlers}, nil
+    ch := make(chan command)
+    return &Server{listener, nil, false, messageHandlers, ch}, nil
 }
 
 func RunGame(){
@@ -250,6 +261,7 @@ func RunGame(){
         return 
     }
     server.RegisterHandlers()
+    go server.manageCommands()
     fmt.Println("Server is running...")
     defer server.server.Close()
     for {
