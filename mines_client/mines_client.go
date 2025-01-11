@@ -140,6 +140,12 @@ const (
     cellSpacing int = 2 
 )
 
+type pressedMouseButton byte
+const (
+    NoButton pressedMouseButton = iota
+    PrimaryButton
+    SecondaryButton
+)
 
 func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
     size := image.Point{X:cell_size, Y:cell_size }
@@ -148,7 +154,39 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
     defer op.Offset(offset).Push(ops).Pop()
     defer clip.Rect(r).Push(ops).Pop()
     event.Op(ops, cell)
-    buttonPressed := 0
+    err := handleCellPressed(ReadCellPresses(cell, q), cell, manager)
+    if err != nil {
+        println(err.Error())
+    }
+    c, mark := getCellColorAndMark(cell)
+     
+    paint.ColorOp{Color: c}.Add(ops)
+    paint.PaintOp{}.Add(ops)
+    drawMark(mark, ops, th, gtx)
+}
+
+func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *GameManager) error {
+    if buttonPressed != NoButton {
+        var mType mines.MoveType
+        if buttonPressed == 1 {
+            mType = mines.Reveal
+        } else {
+            mType = mines.Flag
+        }
+        encoded, err := protocol.EncodeMove(mines.Move{X: cell.x , Y: cell.y, Type: mType})
+        if err != nil {
+            return err
+        }
+        _, err = manager.server.Write(encoded)
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func ReadCellPresses(cell *Cell, q input.Source) pressedMouseButton {
+    
 	for {
 		ev, ok := q.Event(pointer.Filter{
 			Target: cell,
@@ -160,31 +198,18 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
         if x, ok := ev.(pointer.Event); ok {
             if x.Kind == pointer.Press {
                 if x.Buttons.Contain(pointer.ButtonPrimary) {
-                    buttonPressed = 1
+                    return PrimaryButton
                 }else if x.Buttons.Contain(pointer.ButtonSecondary) {
-                    buttonPressed = 2
+                    return SecondaryButton
                 }
             }
         }
 	}
+    return NoButton
+}
 
-    var c color.NRGBA
-    if buttonPressed > 0 {
-        var mType mines.MoveType
-        if buttonPressed == 1 {
-            mType = mines.Reveal
-        } else {
-            mType = mines.Flag
-        }
-        encoded, err := protocol.EncodeMove(mines.Move{X: cell.x , Y: cell.y, Type: mType})
-        if err != nil {
-            println(err.Error())
-            return
-        }
-        manager.server.Write(encoded)
-    }
-    
-    mark := ""
+func getCellColorAndMark(cell *Cell) (c color.NRGBA, mark string) {
+    mark = ""
     c = color.NRGBA{R: 0x30, G: 0x30, B: 0x30, A: 0xFF} 
     if cell.isRevealed {
         c = color.NRGBA{R: 0xAA, G: 0xAA, B: 0xAA, A: 0xFF} 
@@ -198,10 +223,7 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
     if cell.isFlagged{
         c = color.NRGBA{R: 0xAA, G: 0x00, B: 0x00, A: 0xFF} 
     }
-    paint.ColorOp{Color: c}.Add(ops)
-    paint.PaintOp{}.Add(ops)
-    drawMark(mark, ops, th, gtx)
-    
+    return c, mark
 }
 
 func drawMark(mark string, ops *op.Ops, th *material.Theme, gtx layout.Context) {
