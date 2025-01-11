@@ -166,21 +166,24 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
 }
 
 func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *GameManager) error {
-    if buttonPressed != NoButton {
-        var mType mines.MoveType
-        if buttonPressed == 1 {
-            mType = mines.Reveal
-        } else {
-            mType = mines.Flag
-        }
-        encoded, err := protocol.EncodeMove(mines.Move{X: cell.x , Y: cell.y, Type: mType})
-        if err != nil {
-            return err
-        }
-        _, err = manager.server.Write(encoded)
-        if err != nil {
-            return err
-        }
+    var mType mines.MoveType
+    switch buttonPressed {
+    case NoButton:
+        return nil
+    case PrimaryButton:
+        mType = mines.Reveal
+    case SecondaryButton:
+        mType = mines.Flag
+    default:
+        return fmt.Errorf("Unknown button pressed")
+    }
+    encoded, err := protocol.EncodeMove(mines.Move{X: cell.x , Y: cell.y, Type: mType})
+    if err != nil {
+        return err
+    }
+    _, err = manager.server.Write(encoded)
+    if err != nil {
+        return err
     }
     return nil
 }
