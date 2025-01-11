@@ -156,7 +156,7 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
     event.Op(ops, cell)
     err := handleCellPressed(ReadCellPresses(cell, q), cell, manager)
     if err != nil {
-        println(err.Error())
+        println("Failed to send button press:", err.Error())
     }
     c, mark := getCellColorAndMark(cell)
      
@@ -189,7 +189,6 @@ func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *Ga
 }
 
 func ReadCellPresses(cell *Cell, q input.Source) pressedMouseButton {
-    
 	for {
 		ev, ok := q.Event(pointer.Filter{
 			Target: cell,
@@ -244,7 +243,7 @@ func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.
 			Spacing: layout.SpaceAround,
 		}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Editor(th, &menu.ipEditor, "Enter IP Address").Layout(gtx)
+				return material.Editor(th, &menu.ipEditor, "IP Address").Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
@@ -270,19 +269,19 @@ func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.D
 			Spacing: layout.SpaceAround,
 		}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Editor(th, &menu.widthEditor, "Enter Width").Layout(gtx)
+				return material.Editor(th, &menu.widthEditor, "Width").Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Spacer{Height: unit.Dp(8)}.Layout(gtx) // Add spacing
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Editor(th, &menu.heightEditor, "Enter Height").Layout(gtx)
+				return material.Editor(th, &menu.heightEditor, "Height").Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Spacer{Height: unit.Dp(8)}.Layout(gtx) // Add spacing
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Editor(th, &menu.minesEditor, "Enter Number of Mines").Layout(gtx)
+				return material.Editor(th, &menu.minesEditor, "Number of Mines").Layout(gtx)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
@@ -485,7 +484,7 @@ func handleNEwGameButton(menu *Menu) {
     menu.state = GameStartMenu
 }
 
-func draw(w *app.Window, th *material.Theme, menu *Menu) error {
+func mailLoop(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
         manager := &GameManager{}
         RegisterGUIHandlers(w, manager, menu)
@@ -524,13 +523,13 @@ func draw(w *app.Window, th *material.Theme, menu *Menu) error {
 func main() {
     go func() {
         w := new(app.Window)
-        w.Option(app.Title("Minesweeper"))
+        w.Option(app.Title("PogySweeper"))
         th := material.NewTheme()
 
         menu := &Menu{
             state: ConnectMenu,
         }
-        // menu.ipEditor.SetText("127.0.0.1:42069")
+        // menu.ipEditor.SetText("127.0.0.1")
         menu.ipEditor.SingleLine = true
         menu.widthEditor.SetText("10")
         menu.widthEditor.SingleLine = true
@@ -539,7 +538,7 @@ func main() {
         menu.minesEditor.SetText("9")
         menu.minesEditor.SingleLine = true
 
-        err := draw(w, th, menu)
+        err := mailLoop(w, th, menu)
         if err != nil {
             print(err.Error())
         }
