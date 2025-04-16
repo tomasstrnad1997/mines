@@ -221,13 +221,13 @@ func GetNumberOfMines(board *Board, cell *Cell) int {
 
 func (board *Board) Print() {
     print("X")
-    for i:=0; i < board.Width; i++{
+    for i:=range board.Width{
         print(i % 10)
     }
     println()
-    for y := 0; y < board.Height; y++{
+    for y := range board.Height{
         print(y % 10)
-        for x := 0; x < board.Width; x++{
+        for x := range board.Width{
             if board.Cells[x][y].Revealed{
                 print(strconv.Itoa(GetNumberOfMines(board, board.Cells[x][y])))
             }else if board.Cells[x][y].Flagged{
@@ -242,8 +242,8 @@ func (board *Board) Print() {
 
 }
 func (board *Board) PrintRevaled() {
-    for y := 0; y < board.Height; y++{
-        for x := 0; x < board.Width; x++{
+    for y := range board.Height{
+        for x := range board.Width{
             if board.Cells[x][y].Mine{
                 print("O")
             }else{
@@ -335,8 +335,8 @@ func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
 
 func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
     updatedCells := []*Cell{}
-    for y := 0; y < board.Height; y++{
-        for x := 0; x < board.Width; x++{
+    for y := range board.Height{
+        for x := range board.Width{
             cell := board.Cells[x][y]
             if cell.Revealed || cell.Flagged {
                 updatedCells = append(updatedCells, cell)
