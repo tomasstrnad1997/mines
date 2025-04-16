@@ -127,7 +127,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
     cells := make([][]*Cell, width)
     for i := range cells {
         cells[i] = make([]*Cell, height)
-        for j := 0; j < height; j++{
+        for j := range height{
             cells[i][j] = &Cell{false, false, false, i, j}
         }
     }
@@ -141,7 +141,7 @@ func CreateBoard(width, height, mines int) (*Board, error) {
         mines_position[i], mines_position[j] = mines_position[j], mines_position[i]
     })
     for _, position := range mines_position[:mines]{
-        cells[position % width][position / height].Mine = true;
+        cells[position % width][position / width].Mine = true;
     }
 
     return &Board{width, height, mines, cells, 0}, nil
