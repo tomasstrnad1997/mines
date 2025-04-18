@@ -12,8 +12,8 @@ type GameLauncher struct {
     servers map[int] *server.Server
 }
 
-func (mmServer *GameLauncher) SpawnNewGameServer() (*server.Server, error){
-	server, err := server.SpawnServer(mmServer.nextServerId)
+func (mmServer *GameLauncher) SpawnNewGameServer(name string) (*server.Server, error){
+	server, err := server.SpawnServer(mmServer.nextServerId, name)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +37,8 @@ func main() {
         fmt.Println("Failed to start game launcher server:", err.Error())
 		return
 	}
-	for range 3{
-		server, _ := launcher.SpawnNewGameServer()
+	for i := range 3{
+		server, _ := launcher.SpawnNewGameServer(fmt.Sprintf("Game server %d", i))
 		println(server.Port)
 		
 	}

@@ -37,6 +37,7 @@ type command struct {
 }
 type Server struct {
 	id int
+	Name string
     server net.Listener
     game *Game
     gameRunning bool
@@ -245,7 +246,7 @@ func (server *Server) manageCommands(){
     }
 }
 
-func createServer(id int) (*Server, error){
+func createServer(id int, name string) (*Server, error){
     listener, err := net.Listen("tcp", "0.0.0.0:0")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
@@ -254,7 +255,7 @@ func createServer(id int) (*Server, error){
     messageHandlers := make(map[protocol.MessageType]MessageHandler)
     ch := make(chan command)
 	port := listener.Addr().(*net.TCPAddr).Port
-    return &Server{id, listener, nil, false, messageHandlers, ch, uint16(port)}, nil
+    return &Server{id, name, listener, nil, false, messageHandlers, ch, uint16(port)}, nil
 }
 func serverLoop(server *Server){
     defer server.server.Close()
@@ -271,8 +272,8 @@ func serverLoop(server *Server){
         id++
     }
 }
-func SpawnServer(id int) (*Server, error){
-    server, err := createServer(id)
+func SpawnServer(id int, name string) (*Server, error){
+    server, err := createServer(id, name)
     if err != nil {
         return nil, err
     }
@@ -284,5 +285,5 @@ func SpawnServer(id int) (*Server, error){
 
 
 func main() {
-    SpawnServer(0)
+    SpawnServer(0, "Default Server")
 }
