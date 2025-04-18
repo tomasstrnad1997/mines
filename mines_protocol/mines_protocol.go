@@ -18,6 +18,8 @@ const (
     CellUpdate = 0x05
     RequestReload = 0x06
     GameEnd = 0x07
+
+	SpawnServerRequest = 0xA0
 )
 
 type GameEndType byte
@@ -78,13 +80,37 @@ func EncodeGameEnd(endType GameEndType) ([]byte, error){
     return buf.Bytes(), nil
 }
 
+func EncodeSpawnServerRequest(name string) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(SpawnServerRequest))
+    buf.WriteByte(byte(0x00))
+    err := writeLength(&buf, len(name))
+    if err != nil {
+        return nil, err
+    }
+	_, err = buf.WriteString(name)
+	if err != nil {
+		return nil, err
+	}
+    return buf.Bytes(), nil
+}
+
+func DecodeSpawnServerRequest(data []byte) (string, error){
+    _, err := checkAndDecodeLength(data, SpawnServerRequest)
+    if err != nil {
+        return "", err
+    }
+	payload := data[HeaderLength:]
+	return string(payload), nil
+
+}
+
 func DecodeGameEnd(data []byte) (GameEndType, error){
     _, err := checkAndDecodeLength(data, GameEnd)
     if err != nil {
         return 0, err
     }
     return GameEndType(data[HeaderLength]), nil
-
 }
 
 func EncodeTextMessage(message string) ([]byte, error){
@@ -193,8 +219,8 @@ func EncodeBoard(board *mines.Board) ([]byte, error){
     var boardBuf bytes.Buffer
     boardBuf.Write(intToBytes(board.Height))
     boardBuf.Write(intToBytes(board.Width))
-    for y := 0; y < board.Height; y++{
-        for x := 0; x < board.Width; x++{
+    for y := range board.Height{
+        for x := range board.Width{
             boardBuf.Write(encodeCell(board.Cells[x][y]))
         }
     }
