@@ -24,4 +24,14 @@
     * Add option to tell the MM server that some game server is running
         * Add locally hosted games to browser (filter official games and unoficial)
         * If the matchmaking server resets it needs to sync with currently running game
-    
+    * Option to connect by game server name + password
+* Game Server Launcher
+    * For official games create a game lancher that spawns game servers
+    * Can run on any number of machines
+        * MM server either gets their locations from database or game server can connect to MM server and announce itself (unoficiall game server)
+    * Layer between matchmaking server and game server
+* Game Server
+    * Server names
+    * Public/private
+    * Passwords
+    * ?Whitelist friends?
