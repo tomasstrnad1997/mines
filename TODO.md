@@ -21,4 +21,7 @@
         * Monitor
     * Log server creation
     * Server browser
+    * Add option to tell the MM server that some game server is running
+        * Add locally hosted games to browser (filter official games and unoficial)
+        * If the matchmaking server resets it needs to sync with currently running game
     
