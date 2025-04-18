@@ -1,4 +1,4 @@
-module github.com/tomasstrnad1997/mines_matchmaking
+module github.com/tomasstrnad1997/mines_game_server_launcher
 
 go 1.24.2
 

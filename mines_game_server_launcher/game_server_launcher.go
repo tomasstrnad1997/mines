@@ -6,13 +6,13 @@ import (
 
 	server "github.com/tomasstrnad1997/mines_server"
 )
-type MatchmakingServer struct {
+type GameLauncher struct {
 	nextServerId int 
     server net.Listener
     servers map[int] *server.Server
 }
 
-func (mmServer *MatchmakingServer) SpawnNewGameServer() (*server.Server, error){
+func (mmServer *GameLauncher) SpawnNewGameServer() (*server.Server, error){
 	server, err := server.SpawnServer(mmServer.nextServerId)
 	if err != nil {
 		return nil, err
@@ -22,23 +22,23 @@ func (mmServer *MatchmakingServer) SpawnNewGameServer() (*server.Server, error){
 	return server, nil
 }
 
-func CreateMMServer(port uint16) (*MatchmakingServer, error){
+func CreateGameLauncher(port uint16) (*GameLauncher, error){
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
     if err != nil {
         return nil, err
     }
     servers := make(map[int] *server.Server)
-	return &MatchmakingServer{0, listener, servers}, nil
+	return &GameLauncher{0, listener, servers}, nil
 }
 
 func main() {
-	mmServer, err := CreateMMServer(42069)
+	launcher, err := CreateGameLauncher(42070)
 	if err != nil {
-        fmt.Println("Failed to start matchmaking server:", err.Error())
+        fmt.Println("Failed to start game launcher server:", err.Error())
 		return
 	}
 	for range 3{
-		server, _ := mmServer.SpawnNewGameServer()
+		server, _ := launcher.SpawnNewGameServer()
 		println(server.Port)
 		
 	}
