@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bufio"
@@ -36,11 +36,13 @@ type command struct {
     player *Player
 }
 type Server struct {
+	id int
     server net.Listener
     game *Game
     gameRunning bool
     handlers map[protocol.MessageType]MessageHandler
     messageChannel chan command
+	Port uint16
 }
 
 func StartNewGame(params mines.GameParams) (*Game, error){
@@ -243,27 +245,20 @@ func (server *Server) manageCommands(){
     }
 }
 
-func createServer() (*Server, error){
-    listener, err := net.Listen("tcp", "0.0.0.0:42069")
+func createServer(id int) (*Server, error){
+    listener, err := net.Listen("tcp", "0.0.0.0:0")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
     }
     messageHandlers := make(map[protocol.MessageType]MessageHandler)
     ch := make(chan command)
-    return &Server{listener, nil, false, messageHandlers, ch}, nil
+	port := listener.Addr().(*net.TCPAddr).Port
+    return &Server{id, listener, nil, false, messageHandlers, ch, uint16(port)}, nil
 }
-
-func RunGame(){
-    id := 0
-    server, err := createServer()
-    if err != nil {
-        return 
-    }
-    server.RegisterHandlers()
-    go server.manageCommands()
-    fmt.Println("Server is running...")
+func serverLoop(server *Server){
     defer server.server.Close()
+    id := 0
     for {
         conn, err := server.server.Accept()
         if err != nil {
@@ -276,8 +271,18 @@ func RunGame(){
         id++
     }
 }
+func SpawnServer(id int) (*Server, error){
+    server, err := createServer(id)
+    if err != nil {
+        return nil, err
+    }
+    server.RegisterHandlers()
+    go server.manageCommands()
+	go serverLoop(server)
+	return server, nil
+}
 
 
 func main() {
-    RunGame()
+    SpawnServer(0)
 }
