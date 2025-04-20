@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strings"
 
 	"github.com/tomasstrnad1997/mines"
 )
@@ -20,6 +21,8 @@ const (
     GameEnd = 0x07
 
 	SpawnServerRequest = 0xA0
+	SendGameServers = 0xA1
+	GetGameServers = 0xA2
 )
 
 type GameEndType byte
@@ -56,6 +59,7 @@ func intToBytes(i int) []byte{
     binary.BigEndian.PutUint32(buf, uint32(i))
     return buf
 }
+
 func bytesToInt(bytes []byte) int{
     return int(binary.BigEndian.Uint32(bytes))
 }
@@ -80,6 +84,50 @@ func EncodeGameEnd(endType GameEndType) ([]byte, error){
     return buf.Bytes(), nil
 }
 
+func EncodeGetGameServers() ([]byte, error) {
+    var buf bytes.Buffer
+    buf.WriteByte(byte(GetGameServers))
+    buf.WriteByte(byte(0x00))
+    err := writeLength(&buf, 0)
+    if err != nil {
+        return nil, err
+    }
+    return buf.Bytes(), nil
+}
+
+func DecodeGetGameServers(data []byte) (error){
+    _, err := checkAndDecodeLength(data, GetGameServers)
+	return err
+}
+
+func EncodeSendGameServers(names *[]string) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(SendGameServers))
+    buf.WriteByte(byte(0x00))
+	payload := strings.Join(*names, "\n")
+    err := writeLength(&buf, len(payload))
+    if err != nil {
+        return nil, err
+    }
+	_, err = buf.WriteString(payload)
+	if err != nil {
+		return nil, err
+	}
+    return buf.Bytes(), nil
+}
+
+func DecodeSendGameServers(data []byte) (*[]string, error){
+    _, err := checkAndDecodeLength(data, SendGameServers)
+    if err != nil {
+        return nil, err
+    }
+
+	payload := data[HeaderLength:]
+	namesString := string(payload)
+	names := strings.Split(namesString, "\n")
+	return &names, nil
+
+}
 func EncodeSpawnServerRequest(name string) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(SpawnServerRequest))

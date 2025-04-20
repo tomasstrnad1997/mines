@@ -257,6 +257,7 @@ func createServer(id int, name string) (*Server, error){
 	port := listener.Addr().(*net.TCPAddr).Port
     return &Server{id, name, listener, nil, false, messageHandlers, ch, uint16(port)}, nil
 }
+
 func serverLoop(server *Server){
     defer server.server.Close()
     id := 0
@@ -272,6 +273,7 @@ func serverLoop(server *Server){
         id++
     }
 }
+
 func SpawnServer(id int, name string) (*Server, error){
     server, err := createServer(id, name)
     if err != nil {

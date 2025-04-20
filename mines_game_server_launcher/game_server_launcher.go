@@ -1,15 +1,27 @@
-package main
+package gamelauncher
 
 import (
+	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 
+	protocol "github.com/tomasstrnad1997/mines_protocol"
 	server "github.com/tomasstrnad1997/mines_server"
 )
+type MessageHandler func(data []byte, sender net.Conn) error
+
+type command struct {
+    message []byte
+    sender net.Conn
+}
 type GameLauncher struct {
 	nextServerId int 
     server net.Listener
-    servers map[int] *server.Server
+    game_servers map[int] *server.Server
+    handlers map[protocol.MessageType]MessageHandler
+    messageChannel chan command
 }
 
 func (mmServer *GameLauncher) SpawnNewGameServer(name string) (*server.Server, error){
@@ -17,10 +29,103 @@ func (mmServer *GameLauncher) SpawnNewGameServer(name string) (*server.Server, e
 	if err != nil {
 		return nil, err
 	}
-	mmServer.servers[mmServer.nextServerId] = server
+	mmServer.game_servers[mmServer.nextServerId] = server
 	mmServer.nextServerId++
 	return server, nil
 }
+
+func (launcher *GameLauncher) registerHandler(msgType protocol.MessageType, handler MessageHandler){
+    launcher.handlers[msgType] = handler
+}
+
+func (launcher *GameLauncher) HandleMessage(data []byte, sender net.Conn) error{
+    if data == nil {
+        return fmt.Errorf("Cannot handle empty message")
+    }
+    msgType := protocol.MessageType(data[0])
+	handler, exists := launcher.handlers[msgType]
+	if !exists {
+		return fmt.Errorf("No handler registered for message type: %d", msgType)
+	}
+	return handler(data, sender)
+}
+
+func (launcher *GameLauncher) ManageCommands(){
+    for command := range launcher.messageChannel{
+        err := launcher.HandleMessage(command.message, command.sender)
+        if err != nil {
+            println(err.Error())
+        }
+
+    }
+}
+
+func (launcher *GameLauncher) RegisterHandlers(){
+    launcher.registerHandler(protocol.SpawnServerRequest, func(bytes []byte, sender net.Conn) error { 
+        name, err := protocol.DecodeSpawnServerRequest(bytes)
+		if err != nil {
+			return err
+		}
+		server, err := launcher.SpawnNewGameServer(name)
+		if err != nil {
+			return err
+		}
+		println(fmt.Sprintf("Spawned server %s at port %d", name, server.Port))
+		return nil
+
+    })
+    launcher.registerHandler(protocol.GetGameServers, func(bytes []byte, sender net.Conn) error { 
+        err := protocol.DecodeGetGameServers(bytes)
+		if err != nil {
+			return err
+		}
+		serverNames := make([]string, len(launcher.game_servers))
+		for i, server := range launcher.game_servers {
+			serverNames[i] = server.Name
+		}
+		payload, err := protocol.EncodeSendGameServers(&serverNames)
+		sender.Write(payload)
+
+		return nil
+
+    })
+}
+
+func (launcher *GameLauncher) handleRequest (sender net.Conn){
+    reader := bufio.NewReader(sender)
+    fmt.Printf("Client connected from %s to %s\n", sender.RemoteAddr(), sender.LocalAddr())
+	for {
+        header := make([]byte, protocol.HeaderLength)
+		bytesRead, err := reader.Read(header)
+		if err != nil  || bytesRead != protocol.HeaderLength{
+            fmt.Printf("Client disconnected \n")
+			sender.Close()
+			return
+		}
+        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
+        message := make([]byte, messageLenght+protocol.HeaderLength)
+        copy(message[0:protocol.HeaderLength], header)
+        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
+        if err != nil {
+            fmt.Printf("Error reading message")
+            continue
+        }
+        launcher.messageChannel <- command{message, sender}
+	}
+}
+
+func (launcher *GameLauncher) Loop(){
+    defer launcher.server.Close()
+    for {
+        conn, err := launcher.server.Accept()
+        if err != nil {
+            println(err)
+            return
+        }
+        go launcher.handleRequest(conn)
+    }
+}
+
 
 func CreateGameLauncher(port uint16) (*GameLauncher, error){
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -28,7 +133,13 @@ func CreateGameLauncher(port uint16) (*GameLauncher, error){
         return nil, err
     }
     servers := make(map[int] *server.Server)
-	return &GameLauncher{0, listener, servers}, nil
+    handlers := make(map[protocol.MessageType]MessageHandler)
+    ch := make(chan command)
+	launcher := &GameLauncher{0, listener, servers, handlers, ch}
+
+	launcher.RegisterHandlers()
+	return launcher, nil
+
 }
 
 func main() {
@@ -37,12 +148,7 @@ func main() {
         fmt.Println("Failed to start game launcher server:", err.Error())
 		return
 	}
-	for i := range 3{
-		server, _ := launcher.SpawnNewGameServer(fmt.Sprintf("Game server %d", i))
-		println(server.Port)
-		
-	}
-	for {
-	}
+	go launcher.ManageCommands()
+	launcher.Loop()
 	
 }
