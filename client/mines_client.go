@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bufio"
@@ -520,7 +520,8 @@ func mailLoop(w *app.Window, th *material.Theme, menu *Menu) error {
         }
 }
 
-func main() {
+
+func RunClient() {
     go func() {
         w := new(app.Window)
         w.Option(app.Title("PogySweeper"))

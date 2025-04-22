@@ -1,11 +1,8 @@
-module github.com/tomasstrnad1997/mines
+module github.com/tomasstrnad1997/mines/cmd/client
 
 go 1.24.2
 
-require (
-	github.com/tomasstrnad1997/mines/client v0.0.0-20250422130829-cbd78f5b850f
-	github.com/tomasstrnad1997/mines/server v0.0.0-20250422130829-cbd78f5b850f
-)
+require github.com/tomasstrnad1997/mines/client v0.0.0-20250422130829-cbd78f5b850f
 
 require (
 	gioui.org v0.8.0 // indirect
