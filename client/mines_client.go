@@ -24,8 +24,8 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"github.com/tomasstrnad1997/mines"
-	protocol "github.com/tomasstrnad1997/mines_protocol"
+	"github.com/tomasstrnad1997/mines/minesgame"
+	"github.com/tomasstrnad1997/mines/protocol"
 )
 
 type BoardView struct {
