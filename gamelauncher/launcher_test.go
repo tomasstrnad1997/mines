@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomasstrnad1997/mines_game_server_launcher"
-	protocol "github.com/tomasstrnad1997/mines_protocol"
+	"github.com/tomasstrnad1997/mines/gamelauncher"
+	"github.com/tomasstrnad1997/mines/protocol"
 )
 
 func TestGameLaunchViaTCP(t *testing.T){

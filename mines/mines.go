@@ -1,4 +1,4 @@
-package minesgame
+package mines
 
 import (
 	"fmt"

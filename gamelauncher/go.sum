@@ -1,0 +1,6 @@
+github.com/tomasstrnad1997/mines/mines v0.0.0-20250422123616-21be242d712e h1:FRQVQy8+R7+hInPYZLN3dcjpAFIbEo6/OR/6zGau/Pk=
+github.com/tomasstrnad1997/mines/mines v0.0.0-20250422123616-21be242d712e/go.mod h1:CSCptcHR4SzW53/rFhAm1Q7vjbciYeHNJlhiaBATv7c=
+github.com/tomasstrnad1997/mines/protocol v0.0.0-20250422124728-68721fa9d3a1 h1:UD7MNnLYZrQwNO3WOeDclAnFlL1PNeALbw/DJrmdcQM=
+github.com/tomasstrnad1997/mines/protocol v0.0.0-20250422124728-68721fa9d3a1/go.mod h1:F54/EC/UlZFb9A6Pclonrc5tzyBxdPiqGZz0RMevfPg=
+github.com/tomasstrnad1997/mines/server v0.0.0-20250422124728-68721fa9d3a1 h1:6d8vnVq9db9F4/YJhOoVR5iqBHS1dvuM4CU2MTtpRMo=
+github.com/tomasstrnad1997/mines/server v0.0.0-20250422124728-68721fa9d3a1/go.mod h1:3T+7iNA/0MRGLwP+x7a2qC/+LakGOYt+0+ZWHPVgEjk=
