@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 
-	protocol "github.com/tomasstrnad1997/mines_protocol"
-	server "github.com/tomasstrnad1997/mines_server"
+	"github.com/tomasstrnad1997/mines/protocol"
+	"github.com/tomasstrnad1997/mines/server"
 )
 type MessageHandler func(data []byte, sender net.Conn) error
 

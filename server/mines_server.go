@@ -8,8 +8,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/tomasstrnad1997/mines"
-	protocol "github.com/tomasstrnad1997/mines_protocol"
+	"github.com/tomasstrnad1997/mines/mines"
+	"github.com/tomasstrnad1997/mines/protocol"
 )
 
 type Player struct{

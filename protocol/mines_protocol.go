@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tomasstrnad1997/mines/mines"
+	mines"github.com/tomasstrnad1997/mines/mines"
 )
-
 
 type MessageType byte
 const (

@@ -24,7 +24,7 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
-	"github.com/tomasstrnad1997/mines/minesgame"
+	"github.com/tomasstrnad1997/mines/mines"
 	"github.com/tomasstrnad1997/mines/protocol"
 )
 
