@@ -23,6 +23,8 @@ const (
 	SpawnServerRequest = 0xA0
 	SendGameServers = 0xA1
 	GetGameServers = 0xA2
+	PlayerSpawnServerRequest = 0xA3
+	ServerSpawned = 0xA4
 )
 
 type GameEndType byte
@@ -52,7 +54,7 @@ func checkAndDecodeLength(data []byte, message MessageType) (int, error){
         return 0, fmt.Errorf("Data too short to decode")
     }
     if MessageType(data[0]) != message {
-        return 0, fmt.Errorf("Invalid message type for command")
+		return 0, fmt.Errorf("Invalid message type for command E:%d R:%d", message, data[0])
     }
     payloadLength := int(binary.BigEndian.Uint32(data[2:6]))
     if payloadLength != len(data) - HeaderLength {
@@ -89,6 +91,42 @@ func EncodeGameEnd(endType GameEndType) ([]byte, error){
     }
     buf.WriteByte(byte(endType))
     return buf.Bytes(), nil
+}
+
+func EncodeServerSpawned(info *GameServerInfo, requestId uint32) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(ServerSpawned))
+    buf.WriteByte(byte(0x00))
+	encoded, err := EncodeGameServer(info)
+	if err != nil {
+		return nil, err
+	}
+
+	writeLength(&buf, len(encoded)+4)
+	err = binary.Write(&buf, binary.BigEndian, requestId)
+	if err != nil {
+		return nil, err
+	}
+	_, err = buf.Write(encoded)
+	if err != nil {
+		return nil, err
+	}
+    return buf.Bytes(), nil
+}
+
+func DecodeServerSpawned(data []byte) (*GameServerInfo, uint32, error){
+    _, err := checkAndDecodeLength(data, ServerSpawned)
+	if err != nil {
+		return nil, 0, err
+	}
+	payload := data[HeaderLength:]
+	requestId := binary.BigEndian.Uint32(payload[:4])
+	buf := bytes.NewReader(payload[4:])
+	server, err := DecodeGameServer(buf)
+	if err != nil {
+		return nil, 0, err
+	}
+	return server, requestId, nil
 }
 
 func EncodeGetGameServers() ([]byte, error) {
@@ -224,9 +262,25 @@ func readStringWithLength(r io.Reader) (string, error) {
 	return string(strBytes), nil
 }
 
-func EncodeSpawnServerRequest(name string) ([]byte, error){
+func EncodeSpawnServerRequest(name string, requestId uint32) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(SpawnServerRequest))
+    buf.WriteByte(byte(0x00))
+    err := writeLength(&buf, len(name)+4)
+	err = binary.Write(&buf, binary.BigEndian, requestId)
+    if err != nil {
+        return nil, err
+    }
+	_, err = buf.WriteString(name)
+	if err != nil {
+		return nil, err
+	}
+    return buf.Bytes(), nil
+}
+
+func EncodePlayerSpawnServerRequest(name string) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(PlayerSpawnServerRequest))
     buf.WriteByte(byte(0x00))
     err := writeLength(&buf, len(name))
     if err != nil {
@@ -239,14 +293,24 @@ func EncodeSpawnServerRequest(name string) ([]byte, error){
     return buf.Bytes(), nil
 }
 
-func DecodeSpawnServerRequest(data []byte) (string, error){
+func DecodeSpawnServerRequest(data []byte) (string, uint32, error){
     _, err := checkAndDecodeLength(data, SpawnServerRequest)
+    if err != nil {
+        return "", 0, err
+    }
+	payload := data[HeaderLength:]
+	requestId := binary.BigEndian.Uint32(payload[:4])
+	serverName := string(payload[4:])
+	return serverName, requestId, nil
+}
+
+func DecodePlayerSpawnServerRequest(data []byte) (string, error){
+    _, err := checkAndDecodeLength(data, PlayerSpawnServerRequest)
     if err != nil {
         return "", err
     }
 	payload := data[HeaderLength:]
 	return string(payload), nil
-
 }
 
 func DecodeGameEnd(data []byte) (GameEndType, error){
@@ -470,7 +534,7 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
         return nil, fmt.Errorf("update cells payload length mismatch %d", payloadLength)
     }
     cells := make([]mines.UpdatedCell, payloadLength / UpdateCellByteLength)
-    for i:=0; i<payloadLength/UpdateCellByteLength; i++{
+    for i:=range payloadLength/UpdateCellByteLength{
         cell, err := decodeCellUpdate(payload[i*UpdateCellByteLength: (i+1)*UpdateCellByteLength])
         if err != nil {
             return nil, err

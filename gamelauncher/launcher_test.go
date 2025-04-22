@@ -29,7 +29,7 @@ func TestGameLaunchViaTCP(t *testing.T){
 	}
 	defer conn.Close()
 	for i := range(nServers) {
-		payload, err := protocol.EncodeSpawnServerRequest(fmt.Sprintf("Server %d", i))
+		payload, err := protocol.EncodeSpawnServerRequest(fmt.Sprintf("Server %d", i), uint32(i))
 		if err != nil {
 			t.Fatalf("Failed to encode game start request: %v", err)
 		}
@@ -38,33 +38,12 @@ func TestGameLaunchViaTCP(t *testing.T){
 			t.Fatalf("Failed to send payload to spawn game server: %v", err)
 		}
 	}
-	// time.Sleep(300*time.Millisecond)
-	// Request game server info
-	payload, err := protocol.EncodeGetGameServers()
-	if err != nil {
-		t.Fatalf("Failed encode GetGameServers: %v", err)
-	}
-	_, err = conn.Write(payload)
-	if err != nil {
-		t.Fatalf("Failed to send payload to get servers: %v", err)
-	}
-	conn.SetReadDeadline(time.Now().Add(1*time.Second))
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		t.Fatalf("Failed to recieve message %v", err)
-	}
-	data := buf[:n]
-	servers, err := protocol.DecodeSendGameServers(data)
-
-	if err != nil {
-		t.Fatalf("Failed to recieve message %v", err)
-	}
+	time.Sleep(100*time.Millisecond)
 	// Go over server names and check if they are running
 	for i := range(nServers) {
 		name :=	fmt.Sprintf("Server %d", i)
 		found := false
-		for _, server := range servers {
+		for _, server := range launcher.Game_servers{
 			if server.Name == name {
 				found = true
 				continue

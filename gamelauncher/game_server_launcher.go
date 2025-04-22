@@ -16,11 +16,12 @@ type command struct {
     message []byte
     sender net.Conn
 }
+
 type GameLauncher struct {
 	host string
 	nextServerId int 
     server net.Listener
-    game_servers map[int] *server.Server
+    Game_servers map[int] *server.Server
     handlers map[protocol.MessageType]MessageHandler
     messageChannel chan command
 }
@@ -30,7 +31,7 @@ func (launcher *GameLauncher) SpawnNewGameServer(name string) (*server.Server, e
 	if err != nil {
 		return nil, err
 	}
-	launcher.game_servers[launcher.nextServerId] = server
+	launcher.Game_servers[launcher.nextServerId] = server
 	launcher.nextServerId++
 	return server, nil
 }
@@ -63,7 +64,7 @@ func (launcher *GameLauncher) ManageCommands(){
 
 func (launcher *GameLauncher) RegisterHandlers(){
     launcher.registerHandler(protocol.SpawnServerRequest, func(bytes []byte, sender net.Conn) error { 
-        name, err := protocol.DecodeSpawnServerRequest(bytes)
+        name, requestId, err := protocol.DecodeSpawnServerRequest(bytes)
 		if err != nil {
 			return err
 		}
@@ -72,6 +73,13 @@ func (launcher *GameLauncher) RegisterHandlers(){
 			return err
 		}
 		println(fmt.Sprintf("Spawned server %s at port %d", name, server.Port))
+		info := server.GetServerInfo()
+		info.Host = launcher.host
+		message, err := protocol.EncodeServerSpawned(info, requestId)
+		if err != nil {
+			return err
+		}
+		sender.Write(message)
 		return nil
 
     })
@@ -80,12 +88,15 @@ func (launcher *GameLauncher) RegisterHandlers(){
 		if err != nil {
 			return err
 		}
-		serverInfos := make([]*protocol.GameServerInfo, len(launcher.game_servers))
-		for i, server := range launcher.game_servers {
+		serverInfos := make([]*protocol.GameServerInfo, len(launcher.Game_servers))
+		for i, server := range launcher.Game_servers {
 			serverInfos[i] = server.GetServerInfo()
 			serverInfos[i].Host = launcher.host
 		}
 		payload, err := protocol.EncodeSendGameServers(serverInfos)
+		if err != nil {
+			return err
+		}
 		sender.Write(payload)
 
 		return nil
