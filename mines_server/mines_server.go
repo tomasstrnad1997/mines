@@ -46,6 +46,21 @@ type Server struct {
 	Port uint16
 }
 
+func (server *Server) GetNumberOfPlayers() int{
+	count := 0
+	for _, player := range players {
+		if player.connected {
+			count++
+		}
+	}
+	return count
+}
+
+func (server *Server) GetServerInfo() (*protocol.GameServerInfo) {
+	return &protocol.GameServerInfo{Name: server.Name, Host: "", Port: server.Port, PlayerCount: server.GetNumberOfPlayers()}
+	
+}
+
 func StartNewGame(params mines.GameParams) (*Game, error){
     board, err := mines.CreateBoardFromParams(params)
     if err != nil {
@@ -247,7 +262,7 @@ func (server *Server) manageCommands(){
 }
 
 func createServer(id int, name string) (*Server, error){
-    listener, err := net.Listen("tcp", "0.0.0.0:0")
+	listener, err := net.Listen("tcp", "0.0.0.0:0")
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
         return nil, err

@@ -14,14 +14,14 @@ func TestGameLaunchViaTCP(t *testing.T){
 	
 	nServers := 5
 	// Start server
-	launcher, err := gamelauncher.CreateGameLauncher(42070)
+	launcher, err := gamelauncher.CreateGameLauncher("mines.strnadt.cz", 42070)
 	if err != nil {
 		t.Logf("Launcher did not start: %v", err)
 	}
 	go launcher.ManageCommands()
 	go launcher.Loop()
 
-	time.Sleep(300 * time.Millisecond)
+	// time.Sleep(300 * time.Millisecond)
 
 	conn, err := net.Dial("tcp", "localhost:42070")
 	if err != nil {
@@ -38,7 +38,7 @@ func TestGameLaunchViaTCP(t *testing.T){
 			t.Fatalf("Failed to send payload to spawn game server: %v", err)
 		}
 	}
-	time.Sleep(300*time.Millisecond)
+	// time.Sleep(300*time.Millisecond)
 	// Request game server info
 	payload, err := protocol.EncodeGetGameServers()
 	if err != nil {
@@ -55,7 +55,7 @@ func TestGameLaunchViaTCP(t *testing.T){
 		t.Fatalf("Failed to recieve message %v", err)
 	}
 	data := buf[:n]
-	names, err := protocol.DecodeSendGameServers(data)
+	servers, err := protocol.DecodeSendGameServers(data)
 
 	if err != nil {
 		t.Fatalf("Failed to recieve message %v", err)
@@ -64,8 +64,8 @@ func TestGameLaunchViaTCP(t *testing.T){
 	for i := range(nServers) {
 		name :=	fmt.Sprintf("Server %d", i)
 		found := false
-		for _, serverName := range *names {
-			if serverName == name {
+		for _, server := range servers {
+			if server.Name == name {
 				found = true
 				continue
 			}

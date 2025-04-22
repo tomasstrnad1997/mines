@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"strings"
+	"io"
 
 	"github.com/tomasstrnad1997/mines"
 )
@@ -38,6 +38,13 @@ const (
     UpdateCellByteLength = 9
 )
 
+type GameServerInfo struct {
+	Name string
+	Host string //IP for clients to connect to
+	Port uint16
+	PlayerCount int
+}
+
 
 
 func checkAndDecodeLength(data []byte, message MessageType) (int, error){
@@ -67,7 +74,7 @@ func bytesToInt(bytes []byte) int{
 func writeLength(buf *bytes.Buffer, length int) error {
     err := binary.Write(buf, binary.BigEndian, uint32(length))
     if err != nil {
-        return fmt.Errorf("Failed to write payload length (%d)", length)
+        return fmt.Errorf("Failed to write length (%d)", length)
     }
     return nil
 }
@@ -100,34 +107,123 @@ func DecodeGetGameServers(data []byte) (error){
 	return err
 }
 
-func EncodeSendGameServers(names *[]string) ([]byte, error){
+func DecodeSendGameServers(data []byte) ([]*GameServerInfo, error){
+    _, err := checkAndDecodeLength(data, SendGameServers)
+	if err != nil {
+		return nil, err
+	}
+	buf := bytes.NewReader(data[HeaderLength:])
+	servers := make([]*GameServerInfo, 0)
+	for buf.Len() > 0 {
+		server, err := DecodeGameServer(buf)
+		if err != nil {
+			return nil, err
+		}
+		servers = append(servers, server)
+	}
+	return servers, nil
+}
+
+func EncodeSendGameServers(servers []*GameServerInfo) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(SendGameServers))
     buf.WriteByte(byte(0x00))
-	payload := strings.Join(*names, "\n")
-    err := writeLength(&buf, len(payload))
-    if err != nil {
-        return nil, err
-    }
-	_, err = buf.WriteString(payload)
-	if err != nil {
-		return nil, err
+	payloads := make([][]byte, len(servers))
+	payloadLength := 0
+	for i, server := range servers {
+		encoded, err := EncodeGameServer(server)
+		if err != nil {
+			return nil, err
+		}
+		payloads[i] = encoded
+		payloadLength += len(encoded)
+	}
+
+	writeLength(&buf, payloadLength)
+	for _, payload := range payloads {
+		_, err := buf.Write(payload)
+		if err != nil {
+			return nil, err
+		}
 	}
     return buf.Bytes(), nil
 }
 
-func DecodeSendGameServers(data []byte) (*[]string, error){
-    _, err := checkAndDecodeLength(data, SendGameServers)
+func EncodeGameServer(server *GameServerInfo) ([]byte, error){
+	// encoded structure |NameLength - int|name - string|HostLength - int|host - string|port - uint16|PlayerCount - int|
+	// Total lengt = 4+NameLength+4+HostLength+2+4 = 14 + NameLengt + HostLength 
+    var buf bytes.Buffer
+	err := writeStringWithLength(&buf, server.Name)
     if err != nil {
         return nil, err
     }
-
-	payload := data[HeaderLength:]
-	namesString := string(payload)
-	names := strings.Split(namesString, "\n")
-	return &names, nil
-
+	err = writeStringWithLength(&buf, server.Host)
+    if err != nil {
+        return nil, err
+    }
+	err = binary.Write(&buf, binary.BigEndian, server.Port)
+    if err != nil {
+        return nil, err
+    }
+	err = binary.Write(&buf, binary.BigEndian, int32(server.PlayerCount))
+    if err != nil {
+        return nil, err
+    }
+	return buf.Bytes(), nil
 }
+
+func DecodeGameServer(buf io.Reader) (*GameServerInfo, error) {
+	name, err := readStringWithLength(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	host, err := readStringWithLength(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	var port uint16
+	if err := binary.Read(buf, binary.BigEndian, &port); err != nil {
+		return nil, err
+	}
+
+	var playerCount int32
+	if err := binary.Read(buf, binary.BigEndian, &playerCount); err != nil {
+		return nil, err
+	}
+
+	return &GameServerInfo{
+		Name:        name,
+		Host:        host,
+		Port:        port,
+		PlayerCount: int(playerCount),
+	}, nil
+}
+
+func writeStringWithLength(buf *bytes.Buffer, str string) (error){
+    err := writeLength(buf, len(str))
+    if err != nil {
+        return err
+    }
+	_, err = buf.WriteString(str)
+	return err
+}
+
+func readStringWithLength(r io.Reader) (string, error) {
+	var length int32
+	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
+		return "", err
+	}
+
+	strBytes := make([]byte, length)
+	if _, err := io.ReadFull(r, strBytes); err != nil {
+		return "", err
+	}
+
+	return string(strBytes), nil
+}
+
 func EncodeSpawnServerRequest(name string) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(SpawnServerRequest))

@@ -17,6 +17,7 @@ type command struct {
     sender net.Conn
 }
 type GameLauncher struct {
+	host string
 	nextServerId int 
     server net.Listener
     game_servers map[int] *server.Server
@@ -24,13 +25,13 @@ type GameLauncher struct {
     messageChannel chan command
 }
 
-func (mmServer *GameLauncher) SpawnNewGameServer(name string) (*server.Server, error){
-	server, err := server.SpawnServer(mmServer.nextServerId, name)
+func (launcher *GameLauncher) SpawnNewGameServer(name string) (*server.Server, error){
+	server, err := server.SpawnServer(launcher.nextServerId, name)
 	if err != nil {
 		return nil, err
 	}
-	mmServer.game_servers[mmServer.nextServerId] = server
-	mmServer.nextServerId++
+	launcher.game_servers[launcher.nextServerId] = server
+	launcher.nextServerId++
 	return server, nil
 }
 
@@ -79,11 +80,12 @@ func (launcher *GameLauncher) RegisterHandlers(){
 		if err != nil {
 			return err
 		}
-		serverNames := make([]string, len(launcher.game_servers))
+		serverInfos := make([]*protocol.GameServerInfo, len(launcher.game_servers))
 		for i, server := range launcher.game_servers {
-			serverNames[i] = server.Name
+			serverInfos[i] = server.GetServerInfo()
+			serverInfos[i].Host = launcher.host
 		}
-		payload, err := protocol.EncodeSendGameServers(&serverNames)
+		payload, err := protocol.EncodeSendGameServers(serverInfos)
 		sender.Write(payload)
 
 		return nil
@@ -127,7 +129,7 @@ func (launcher *GameLauncher) Loop(){
 }
 
 
-func CreateGameLauncher(port uint16) (*GameLauncher, error){
+func CreateGameLauncher(host string, port uint16) (*GameLauncher, error){
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
     if err != nil {
         return nil, err
@@ -135,7 +137,7 @@ func CreateGameLauncher(port uint16) (*GameLauncher, error){
     servers := make(map[int] *server.Server)
     handlers := make(map[protocol.MessageType]MessageHandler)
     ch := make(chan command)
-	launcher := &GameLauncher{0, listener, servers, handlers, ch}
+	launcher := &GameLauncher{host, 0, listener, servers, handlers, ch}
 
 	launcher.RegisterHandlers()
 	return launcher, nil
@@ -143,7 +145,7 @@ func CreateGameLauncher(port uint16) (*GameLauncher, error){
 }
 
 func main() {
-	launcher, err := CreateGameLauncher(42070)
+	launcher, err := CreateGameLauncher("0.0.0.0", 42070)
 	if err != nil {
         fmt.Println("Failed to start game launcher server:", err.Error())
 		return
