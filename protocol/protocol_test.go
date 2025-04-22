@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	protocol "github.com/tomasstrnad1997/mines_protocol"
+	"github.com/tomasstrnad1997/mines/protocol"
 )
 
 

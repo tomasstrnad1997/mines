@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tomasstrnad1997/mines"
+	"github.com/tomasstrnad1997/mines/mines"
 )
 
 
