@@ -72,7 +72,7 @@ func (launcher *GameLauncher) RegisterHandlers(){
 		if err != nil {
 			return err
 		}
-		println(fmt.Sprintf("Spawned server %s at port %d", name, server.Port))
+		println(fmt.Sprintf("Spawned server: %s at port %d", name, server.Port))
 		info := server.GetServerInfo()
 		info.Host = launcher.host
 		message, err := protocol.EncodeServerSpawned(info, requestId)
@@ -84,7 +84,8 @@ func (launcher *GameLauncher) RegisterHandlers(){
 
     })
     launcher.registerHandler(protocol.GetGameServers, func(bytes []byte, sender net.Conn) error { 
-        err := protocol.DecodeGetGameServers(bytes)
+		var requestId uint32
+        err := protocol.DecodeGetGameServers(bytes, &requestId)
 		if err != nil {
 			return err
 		}
@@ -93,14 +94,13 @@ func (launcher *GameLauncher) RegisterHandlers(){
 			serverInfos[i] = server.GetServerInfo()
 			serverInfos[i].Host = launcher.host
 		}
-		payload, err := protocol.EncodeSendGameServers(serverInfos)
+		payload, err := protocol.EncodeSendGameServers(serverInfos, &requestId)
 		if err != nil {
 			return err
 		}
 		sender.Write(payload)
 
 		return nil
-
     })
 }
 

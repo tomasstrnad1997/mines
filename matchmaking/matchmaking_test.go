@@ -31,7 +31,6 @@ func TestGameServerSpawn(t *testing.T){
 	}
 	go launcher.ManageCommands()
 	go launcher.Loop()
-
 	mmServer.ConnectToLauncher("localhost", launcherPort)
 
 	// Connect to matchmaking server as a player
@@ -44,7 +43,6 @@ func TestGameServerSpawn(t *testing.T){
 	// Request a server spawn
 	payload, err := protocol.EncodePlayerSpawnServerRequest(serverName)
 	conn.Write(payload)
-	
 	// Wait for response from MM server
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
     reader := bufio.NewReader(conn)
@@ -63,7 +61,7 @@ func TestGameServerSpawn(t *testing.T){
 	if err != nil {
 		t.Fatalf("Failed to read message %v", err)
 	}
-	infos, err := protocol.DecodeSendGameServers(message)
+	infos, err := protocol.DecodeSendGameServers(message, nil)
 	if len(infos) != 1 {
 		t.Fatalf("Length of recieved servers != 1")
 	}

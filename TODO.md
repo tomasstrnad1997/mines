@@ -35,3 +35,6 @@
     * Public/private
     * Passwords
     * ?Whitelist friends?
+* Protocol
+    * Consistent usage of requestIds
+    * Consider writing length at the end by owerwriting byte 3 and 4 in header

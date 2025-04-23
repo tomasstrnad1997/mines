@@ -71,12 +71,11 @@ func (server *MatchmakingServer) RegisterHandlers(){
 			return err
 		}
 		requestId := server.GetNextRequestId()
-		server.pendingRequests.Store(requestId, sender)
 		payload, err := protocol.EncodeSpawnServerRequest(serverName, requestId)
 		if err != nil {
 			return err
 		}
-		
+		server.pendingRequests.Store(requestId, sender)
 		launcher.connection.Write(payload)
 		return nil
     })
@@ -89,8 +88,45 @@ func (server *MatchmakingServer) RegisterHandlers(){
 		if !ok {
 			return fmt.Errorf("Request id is not in pending requests")
 		}
+		// Do checks if the client is still connected
 		requester := value.(net.Conn)
-		payload, err := protocol.EncodeSendGameServers([]*protocol.GameServerInfo{info})
+		payload, err := protocol.EncodeSendGameServers([]*protocol.GameServerInfo{info}, nil)
+		if err != nil {
+			return err
+		}
+		requester.Write(payload)
+		return nil
+    })
+    server.registerHandler(protocol.GetGameServers, func(bytes []byte, sender net.Conn) error { 
+        err := protocol.DecodeGetGameServers(bytes, nil)
+		if err != nil {
+			return err
+		}
+		// Request all servers from all launchers
+		for _, launcher := range server.GameLaunchers {
+			requestId := server.GetNextRequestId()
+			payload, err := protocol.EncodeGetGameServers(&requestId)
+			if err != nil {
+				return err
+			}
+			server.pendingRequests.Store(requestId, sender)
+			launcher.connection.Write(payload)
+		}
+		return nil
+    })
+    server.registerHandler(protocol.SendGameServers, func(bytes []byte, sender net.Conn) error { 
+		var requestId uint32
+		infos, err := protocol.DecodeSendGameServers(bytes, &requestId)
+		if err != nil {
+			return err
+		}
+		value, ok := server.pendingRequests.LoadAndDelete(requestId)
+		if !ok {
+			return fmt.Errorf("Request id is not in pending requests")
+		}
+		// Do checks if the client is still connected
+		requester := value.(net.Conn)
+		payload, err := protocol.EncodeSendGameServers(infos, nil)
 		if err != nil {
 			return err
 		}
