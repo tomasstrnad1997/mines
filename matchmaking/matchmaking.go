@@ -82,7 +82,10 @@ func (server *MatchmakingServer) RegisterHandlers(){
 			return fmt.Errorf("Request id is not in pending requests")
 		}
 		// Do checks if the client is still connected
-		requester := value.(net.Conn)
+		requester, ok := value.(net.Conn)
+		if !ok {
+			return fmt.Errorf("Stored request is not net.Conn")
+		}
 		payload, err := protocol.EncodeServerSpawned(info, nil)
 		if err != nil {
 			return err
@@ -118,7 +121,10 @@ func (server *MatchmakingServer) RegisterHandlers(){
 			return fmt.Errorf("Request id is not in pending requests")
 		}
 		// Do checks if the client is still connected
-		requester := value.(net.Conn)
+		requester, ok := value.(net.Conn)
+		if !ok {
+			return fmt.Errorf("Stored request is not net.Conn")
+		}
 		payload, err := protocol.EncodeSendGameServers(infos, nil)
 		if err != nil {
 			return err
@@ -138,6 +144,7 @@ func (server *MatchmakingServer) chooseGameLauncher() (*GameLauncher, error){
 func handlePlayerConnection(player *Player, server *MatchmakingServer){
     reader := bufio.NewReader(player.client)
 	addr := player.client.RemoteAddr().String()
+	server.Players[addr] = player
     fmt.Printf("Player connected from %s\n", addr)
 	for {
         header := make([]byte, protocol.HeaderLength)
