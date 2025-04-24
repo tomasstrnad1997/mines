@@ -23,8 +23,7 @@ const (
 	SpawnServerRequest = 0xA0
 	SendGameServers = 0xA1
 	GetGameServers = 0xA2
-	PlayerSpawnServerRequest = 0xA3
-	ServerSpawned = 0xA4
+	ServerSpawned = 0xA3
 )
 
 
@@ -113,19 +112,26 @@ func EncodeGameEnd(endType GameEndType) ([]byte, error){
     return buf.Bytes(), nil
 }
 
-func EncodeServerSpawned(info *GameServerInfo, requestId uint32) ([]byte, error){
+func EncodeServerSpawned(info *GameServerInfo, requestId *uint32) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(ServerSpawned))
-    buf.WriteByte(byte(0x00))
+	var flag byte = 0x00
+	offset := 0
+	if requestId != nil {
+		flag |= HasIdFlag
+		offset += 4
+	}
 	encoded, err := EncodeGameServer(info)
 	if err != nil {
 		return nil, err
 	}
 
-	writeLength(&buf, len(encoded)+4)
-	err = binary.Write(&buf, binary.BigEndian, requestId)
-	if err != nil {
-		return nil, err
+	buf.WriteByte(byte(flag))
+	writeLength(&buf, len(encoded) + offset)
+	if requestId != nil {
+		if err = binary.Write(&buf, binary.BigEndian, requestId); err != nil {
+			return nil, err
+		}
 	}
 	_, err = buf.Write(encoded)
 	if err != nil {
@@ -134,19 +140,26 @@ func EncodeServerSpawned(info *GameServerInfo, requestId uint32) ([]byte, error)
     return buf.Bytes(), nil
 }
 
-func DecodeServerSpawned(data []byte) (*GameServerInfo, uint32, error){
+func DecodeServerSpawned(data []byte, requestId *uint32) (*GameServerInfo, error){
     _, err := checkAndDecodeLength(data, ServerSpawned)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	payload := data[HeaderLength:]
-	requestId := binary.BigEndian.Uint32(payload[:4])
-	buf := bytes.NewReader(payload[4:])
+	offset := HeaderLength
+	if requestId != nil {
+		if err = GetRequestId(data, requestId); err != nil {
+			return nil, err
+		}
+		offset += 4
+
+	}
+	payload := data[offset:]
+	buf := bytes.NewReader(payload)
 	server, err := DecodeGameServer(buf)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	return server, requestId, nil
+	return server, nil
 }
 
 func EncodeGetGameServers(requestId *uint32) ([]byte, error) {
@@ -322,15 +335,22 @@ func readStringWithLength(r io.Reader) (string, error) {
 	return string(strBytes), nil
 }
 
-func EncodeSpawnServerRequest(name string, requestId uint32) ([]byte, error){
+func EncodeSpawnServerRequest(name string, requestId *uint32) ([]byte, error){
     var buf bytes.Buffer
     buf.WriteByte(byte(SpawnServerRequest))
-    buf.WriteByte(byte(0x00))
-    err := writeLength(&buf, len(name)+4)
-	err = binary.Write(&buf, binary.BigEndian, requestId)
-    if err != nil {
-        return nil, err
-    }
+	var flag byte = 0x00
+	offset := 0
+	if requestId != nil {
+		offset += 4
+		flag |= HasIdFlag
+	}
+	buf.WriteByte(byte(flag))
+    err := writeLength(&buf, len(name)+offset)
+	if requestId != nil{
+		if err := binary.Write(&buf, binary.BigEndian, requestId); err != nil {
+			return nil, err
+		}
+	}
 	_, err = buf.WriteString(name)
 	if err != nil {
 		return nil, err
@@ -338,39 +358,21 @@ func EncodeSpawnServerRequest(name string, requestId uint32) ([]byte, error){
     return buf.Bytes(), nil
 }
 
-func EncodePlayerSpawnServerRequest(name string) ([]byte, error){
-    var buf bytes.Buffer
-    buf.WriteByte(byte(PlayerSpawnServerRequest))
-    buf.WriteByte(byte(0x00))
-    err := writeLength(&buf, len(name))
-    if err != nil {
-        return nil, err
-    }
-	_, err = buf.WriteString(name)
-	if err != nil {
-		return nil, err
-	}
-    return buf.Bytes(), nil
-}
-
-func DecodeSpawnServerRequest(data []byte) (string, uint32, error){
+func DecodeSpawnServerRequest(data []byte, requestId *uint32) (string, error){
     _, err := checkAndDecodeLength(data, SpawnServerRequest)
-    if err != nil {
-        return "", 0, err
-    }
-	payload := data[HeaderLength:]
-	requestId := binary.BigEndian.Uint32(payload[:4])
-	serverName := string(payload[4:])
-	return serverName, requestId, nil
-}
-
-func DecodePlayerSpawnServerRequest(data []byte) (string, error){
-    _, err := checkAndDecodeLength(data, PlayerSpawnServerRequest)
     if err != nil {
         return "", err
     }
-	payload := data[HeaderLength:]
-	return string(payload), nil
+	offset := HeaderLength
+	if requestId != nil {
+		if err = GetRequestId(data, requestId); err != nil {
+			return "", nil
+		}
+		offset += 4
+	}
+	payload := data[offset:]
+	serverName := string(payload)
+	return serverName, nil
 }
 
 func DecodeGameEnd(data []byte) (GameEndType, error){

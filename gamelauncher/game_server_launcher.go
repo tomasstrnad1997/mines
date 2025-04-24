@@ -64,7 +64,8 @@ func (launcher *GameLauncher) ManageCommands(){
 
 func (launcher *GameLauncher) RegisterHandlers(){
     launcher.registerHandler(protocol.SpawnServerRequest, func(bytes []byte, sender net.Conn) error { 
-        name, requestId, err := protocol.DecodeSpawnServerRequest(bytes)
+		var requestId uint32
+        name, err := protocol.DecodeSpawnServerRequest(bytes, &requestId)
 		if err != nil {
 			return err
 		}
@@ -75,11 +76,14 @@ func (launcher *GameLauncher) RegisterHandlers(){
 		println(fmt.Sprintf("Spawned server: %s at port %d", name, server.Port))
 		info := server.GetServerInfo()
 		info.Host = launcher.host
-		message, err := protocol.EncodeServerSpawned(info, requestId)
+		message, err := protocol.EncodeServerSpawned(info, &requestId)
 		if err != nil {
 			return err
 		}
-		sender.Write(message)
+		_, err = sender.Write(message)
+		if err != nil{
+			return err
+		}
 		return nil
 
     })

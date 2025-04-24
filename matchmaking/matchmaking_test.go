@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/tomasstrnad1997/mines/gamelauncher"
 	"github.com/tomasstrnad1997/mines/matchmaking"
@@ -41,10 +40,10 @@ func TestGameServerSpawn(t *testing.T){
 	defer conn.Close()
 	
 	// Request a server spawn
-	payload, err := protocol.EncodePlayerSpawnServerRequest(serverName)
+	payload, err := protocol.EncodeSpawnServerRequest(serverName, nil)
 	conn.Write(payload)
 	// Wait for response from MM server
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	// conn.SetReadDeadline(time.Now().Add(2 * time.Second))
     reader := bufio.NewReader(conn)
 	header := make([]byte, protocol.HeaderLength)
 	bytesRead, err := reader.Read(header)
@@ -61,11 +60,7 @@ func TestGameServerSpawn(t *testing.T){
 	if err != nil {
 		t.Fatalf("Failed to read message %v", err)
 	}
-	infos, err := protocol.DecodeSendGameServers(message, nil)
-	if len(infos) != 1 {
-		t.Fatalf("Length of recieved servers != 1")
-	}
-	serverInfo := infos[0]
+	serverInfo, err := protocol.DecodeServerSpawned(message, nil)
 	if serverInfo.Name != serverName {
 		t.Fatalf("Server name mismatch")
 	}

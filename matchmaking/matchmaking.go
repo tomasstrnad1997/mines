@@ -58,20 +58,12 @@ func (server *MatchmakingServer) RegisterHandlers(){
 		if err != nil {
 			return err
 		}
-		launcher.connection.Write(bytes)
-		return nil
-    })
-    server.registerHandler(protocol.PlayerSpawnServerRequest, func(bytes []byte, sender net.Conn) error { 
-		launcher, err := server.chooseGameLauncher()
-		if err != nil {
-			return err
-		}
-		serverName, err := protocol.DecodePlayerSpawnServerRequest(bytes)
+		serverName, err := protocol.DecodeSpawnServerRequest(bytes, nil)
 		if err != nil {
 			return err
 		}
 		requestId := server.GetNextRequestId()
-		payload, err := protocol.EncodeSpawnServerRequest(serverName, requestId)
+		payload, err := protocol.EncodeSpawnServerRequest(serverName, &requestId)
 		if err != nil {
 			return err
 		}
@@ -80,7 +72,8 @@ func (server *MatchmakingServer) RegisterHandlers(){
 		return nil
     })
     server.registerHandler(protocol.ServerSpawned, func(bytes []byte, sender net.Conn) error { 
-		info, requestId, err := protocol.DecodeServerSpawned(bytes)
+		var requestId uint32
+		info, err := protocol.DecodeServerSpawned(bytes, &requestId)
 		if err != nil {
 			return err
 		}
@@ -90,7 +83,7 @@ func (server *MatchmakingServer) RegisterHandlers(){
 		}
 		// Do checks if the client is still connected
 		requester := value.(net.Conn)
-		payload, err := protocol.EncodeSendGameServers([]*protocol.GameServerInfo{info}, nil)
+		payload, err := protocol.EncodeServerSpawned(info, nil)
 		if err != nil {
 			return err
 		}
@@ -152,7 +145,7 @@ func handlePlayerConnection(player *Player, server *MatchmakingServer){
 		if err != nil  || bytesRead != protocol.HeaderLength{
             fmt.Printf("Player %s disconnected \n", addr)
             server.Players[addr].connected = false
-			player.client.Close()
+			server.Players[addr].client.Close()
 			return
 		}
         messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
