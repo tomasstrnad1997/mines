@@ -6,6 +6,12 @@ import (
 	"strconv"
 )
 
+type GameModeId byte
+
+const (
+	ModeClassic GameModeId = iota
+)
+
 type Cell struct
 {
     Mine bool
@@ -41,7 +47,59 @@ type GameParams struct {
     Width int
     Height int
     Mines int
+	GameMode GameModeId
 }
+
+type GameMode interface {
+	Init(*Board)
+	Name() string
+	GameModeId() GameModeId
+	OnMove(*Board, Move, *MoveResult) error
+}
+
+type Game struct {
+	board *Board
+	Params GameParams
+	Mode GameMode
+}
+
+func (game *Game) MakeMove(move Move) (*MoveResult, error){
+	result, err := game.board.makeMove(move)
+	if err != nil {
+		return nil, err
+	}
+	if err = game.Mode.OnMove(game.board, move, result); err != nil {
+		return nil, err
+	}
+
+	return result, err
+	
+}
+
+func GetGameModeById(id GameModeId) (GameMode, error){
+	switch id {
+	case ModeClassic:
+		return &Classic{}, nil
+	default:
+		return nil, fmt.Errorf("Unknown gamemode id: %d", id)
+	}
+}
+
+func CreateGame(params GameParams) (*Game, error){
+    board, err := CreateBoardFromParams(params)
+    if err != nil {
+        fmt.Println(err)
+        return nil, err
+    }
+	gamemode, err := GetGameModeById(params.GameMode)
+	if err != nil{
+		return nil, err
+	}
+	gamemode.Init(board)
+
+    return &Game{board: board, Params: params, Mode: gamemode}, nil
+}
+
 
 func (move Move) String() string {
     msg := fmt.Sprintf("(%d, %d) ", move.X, move.Y)
@@ -149,16 +207,16 @@ func CreateBoard(width, height, mines int) (*Board, error) {
 }
 
 
-func Cascade(board *Board, cell *Cell, updatedCells []*Cell) ([]*Cell){
+func cascade(board *Board, cell *Cell, updatedCells []*Cell) ([]*Cell){
     cell.Revealed = true
     updatedCells = append(updatedCells, cell)
 
     if GetNumberOfMines(board, cell) != 0 {
         return updatedCells
     }
-    for _, ncell := range GetNeighbouringCells(board, cell){
+    for _, ncell := range getNeighbouringCells(board, cell){
         if !ncell.Revealed && !ncell.Flagged {
-            updatedCells = Cascade(board, ncell, updatedCells)
+            updatedCells = cascade(board, ncell, updatedCells)
         }
     }
     return updatedCells
@@ -181,7 +239,7 @@ func (board *Board) Reveal(x, y int) (*MoveResult, error) {
         return &MoveResult{MineBlown, []*Cell{cell}}, nil
     }
     var updatedCells = []*Cell{}
-    updatedCells = Cascade(board, cell, updatedCells)
+    updatedCells = cascade(board, cell, updatedCells)
     board.RevealedCells += len(updatedCells)
     var result MoveResultType
     if board.RevealedCells + board.Mines == board.Width*board.Height {
@@ -193,7 +251,7 @@ func (board *Board) Reveal(x, y int) (*MoveResult, error) {
     return &MoveResult{result, updatedCells}, nil
 }
 
-func GetNeighbouringCells(board *Board, cell *Cell) []*Cell {
+func getNeighbouringCells(board *Board, cell *Cell) []*Cell {
     var cells []*Cell
     for dx := -1; dx <= 1; dx++{
         for dy := -1; dy <= 1; dy++{
@@ -210,7 +268,7 @@ func GetNeighbouringCells(board *Board, cell *Cell) []*Cell {
 
 func GetNumberOfMines(board *Board, cell *Cell) int {
     mines := 0 
-    for _, cell := range GetNeighbouringCells(board, cell){
+    for _, cell := range getNeighbouringCells(board, cell){
         if cell.Mine {
             mines ++
         }
@@ -278,7 +336,7 @@ func (board *Board) Flag(x, y int) (*MoveResult, error) {
     return &MoveResult{Flagged, []*Cell{board.Cells[x][y]}}, nil 
 }
 
-func (board *Board) MakeMove(move Move) (*MoveResult, error){
+func (board *Board) makeMove(move Move) (*MoveResult, error){
     switch move.Type {
         case Reveal:
             return board.Reveal(move.X, move.Y)
@@ -311,7 +369,11 @@ func (board *Board) ProcessTextCommand(text string) (*MoveResult, error){
     }
 }
 
-func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
+func (game *Game) CreateCellUpdates(cells []*Cell) ([]UpdatedCell, error){
+	return game.board.CreateCellUpdates(cells)
+}
+
+func (board *Board) CreateCellUpdates(cells []*Cell) ([]UpdatedCell, error){
     updates := make([]UpdatedCell, len(cells))
     var value byte
     for i, cell := range cells {
@@ -330,10 +392,13 @@ func CreateUpdatedCells(board *Board, cells []*Cell) ([]UpdatedCell, error){
         updates[i] = UpdatedCell{X: cell.X, Y: cell.Y, Value:value}
     }
     return updates, nil
-    
 }
 
-func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
+func (game *Game) GetChangedCellUpdates() ([]UpdatedCell, error) {
+	return game.board.GetChangedCellUpdates()
+}
+
+func (board *Board) GetChangedCellUpdates() ([]UpdatedCell, error) {
     updatedCells := []*Cell{}
     for y := range board.Height{
         for x := range board.Width{
@@ -343,14 +408,14 @@ func (board *Board) CreateCellUpdates() ([]UpdatedCell, error) {
             }
         }
     }
-    return  CreateUpdatedCells(board, updatedCells)
+    return board.CreateCellUpdates(updatedCells)
 }
 
 func main() {
     mines := 5
     board, err := CreateBoard(5, 5, mines);
     move := Move{1, 2, 0x02}
-    board.MakeMove(move)
+    board.makeMove(move)
     if err != nil {
         fmt.Println(err)
         return

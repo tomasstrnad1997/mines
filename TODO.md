@@ -17,8 +17,7 @@
     * Visually show which mine other player clicked
     * Pings/drawing for other players
 * Matchmaking server
-    * Spawn game server
-        * Monitor
+    * Monitor launchers
     * Log server creation
     * Server browser
     * Add option to tell the MM server that some game server is running
@@ -36,5 +35,4 @@
     * Passwords
     * ?Whitelist friends?
 * Protocol
-    * Consistent usage of requestIds
     * Consider writing length at the end by owerwriting byte 3 and 4 in header

@@ -300,8 +300,8 @@ func drawBoard(manager *GameManager, ops *op.Ops, q input.Source, th *material.T
     offset := image.Point{X: 10, Y: 10}
     defer op.Offset(offset).Push(ops).Pop()
     boardMutex.Lock()
-    for col := 0; col < manager.params.Width; col++ {
-        for row := 0; row < manager.params.Height; row++ {
+    for col := range manager.params.Width {
+        for row := range manager.params.Height {
             createCell(cellSize, manager, &manager.grid[col][row], ops, q, th, gtx)
         }
     }
@@ -391,7 +391,7 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
     nMines, errm := strconv.Atoi(menu.minesEditor.Text())
     if errw != nil || errh != nil || errm != nil {
     }else {
-        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines})
+        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines, GameMode: mines.Classic})
         if err != nil {
             println(err.Error())
         }else{
@@ -403,9 +403,9 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
 func initializeGrid(manager *GameManager) {
     boardMutex.Lock()
     manager.grid = make([][]Cell, manager.params.Width)
-    for i := 0; i < manager.params.Width; i++ {
+    for i := range manager.params.Width {
         manager.grid[i] = make([]Cell, manager.params.Height)
-        for j := 0; j < manager.params.Height; j++ {
+        for j := range manager.params.Height {
             manager.grid[i][j].x = i
             manager.grid[i][j].y = j
         }

@@ -16,17 +16,7 @@ type Player struct{
     client net.Conn
     id int
     connected bool
-}
-
-var (
-    clients = make(map[int]bool)
-    players = make(map[int]*Player)
-    clientsMux sync.Mutex
-)
-
-type Game struct {
-    board *mines.Board
-    parameters mines.GameParams
+	writeMutex sync.Mutex
 }
 
 type MessageHandler func(data []byte, source int) error
@@ -39,16 +29,19 @@ type Server struct {
 	id int
 	Name string
     server net.Listener
-    game *Game
+    game *mines.Game
     gameRunning bool
     handlers map[protocol.MessageType]MessageHandler
     messageChannel chan command
 	Port uint16
+    clients map[int]bool
+    players map[int]*Player
+    clientsMux sync.Mutex
 }
 
 func (server *Server) GetNumberOfPlayers() int{
 	count := 0
-	for _, player := range players {
+	for _, player := range server.players {
 		if player.connected {
 			count++
 		}
@@ -61,46 +54,39 @@ func (server *Server) GetServerInfo() (*protocol.GameServerInfo) {
 	
 }
 
-func StartNewGame(params mines.GameParams) (*Game, error){
-    board, err := mines.CreateBoardFromParams(params)
-    if err != nil {
-        fmt.Println(err)
-        return nil, err
-    }
-    return &Game{board, params}, nil
-}
-
 func (server *Server) StartGame(params mines.GameParams) error{
-    game, err := StartNewGame(params)
+    game, err := mines.CreateGame(params)
     if err != nil {
         return err
     }
     server.game = game
-    broadcastTextMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
+    server.broadcastTextMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
 
     println("Starting a new game")
     startMsg, err := protocol.EncodeGameStart(params)
     if err != nil {
         return err
     }
-    broadcast(startMsg)
+    server.broadcast(startMsg)
     server.gameRunning = true
     return nil
 }
 
-func broadcastTextMessage(message string) {
+func (server *Server) broadcastTextMessage(message string) {
     encoded, err := protocol.EncodeTextMessage(message) 
     if err != nil{
         println("Failed to create message")
         return
     }
-    broadcast(encoded)
+    server.broadcast(encoded)
 }
 
-func broadcast(data []byte) {
-    for id := range players {
-        if players[id].connected {
-            players[id].client.Write(data)
+func (server *Server) broadcast(data []byte) {
+    for _, player := range server.players {
+        if player.connected {
+			player.writeMutex.Lock()
+            player.client.Write(data)
+			player.writeMutex.Unlock()
         }
     }
 }
@@ -114,19 +100,20 @@ func sendTextMessage(msg string, player *Player) {
 }
 
 func sendMessage(data []byte, player *Player) {
-    player.client.Write(data)
+	if player.connected {
+		player.writeMutex.Lock()
+		player.client.Write(data)
+		player.writeMutex.Unlock()
+	}
 }
 
-func sendInitialMessages(player *Player, server *Server) (error) {
-    if server.game.board == nil {
-        return nil
-    }
-    startMsg, err := protocol.EncodeGameStart(server.game.parameters)
+func (server *Server) sendInitialMessages(player *Player) (error) {
+    startMsg, err := protocol.EncodeGameStart(server.game.Params)
     if err != nil {
         return err
     }
     sendMessage(startMsg, player)
-    cellUpdates, err := server.game.board.CreateCellUpdates()
+    cellUpdates, err := server.game.GetChangedCellUpdates()
     if err != nil {
         return err
     }
@@ -141,24 +128,24 @@ func sendInitialMessages(player *Player, server *Server) (error) {
 
 func handleRequest(player *Player, server *Server){
     reader := bufio.NewReader(player.client)
-    clientsMux.Lock()
-    clients[player.id] = true
-    clientsMux.Unlock()
+    server.clientsMux.Lock()
+    server.clients[player.id] = true
+    server.clientsMux.Unlock()
     fmt.Printf("Player %d connected from %s to %s\n", player.id, player.client.RemoteAddr(), player.client.LocalAddr())
     if server.gameRunning {
-        sendInitialMessages(player, server)
+        server.sendInitialMessages(player)
     }
-    broadcastTextMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
+    server.broadcastTextMessage(fmt.Sprintf("Player %d connected from %s to %s", player.id, player.client.RemoteAddr(), player.client.LocalAddr()))
 	for {
         header := make([]byte, protocol.HeaderLength)
 		bytesRead, err := reader.Read(header)
 		if err != nil  || bytesRead != protocol.HeaderLength{
             fmt.Printf("Player %d disconnected \n", player.id)
-            broadcastTextMessage(fmt.Sprintf("Player %d disconnected", player.id))
-            players[player.id].connected = false
-            clientsMux.Lock()
-            clients[player.id] = false
-            clientsMux.Unlock()
+            server.broadcastTextMessage(fmt.Sprintf("Player %d disconnected", player.id))
+            server.players[player.id].connected = false
+            server.clientsMux.Lock()
+            server.clients[player.id] = false
+            server.clientsMux.Unlock()
 			player.client.Close()
 			return
 		}
@@ -201,27 +188,26 @@ func (server *Server) RegisterHandlers(){
             if err != nil {
                 return err
             }
-            broadcast(msg)
+            server.broadcast(msg)
         }
-        broadcastTextMessage(fmt.Sprintf("Player %d requested new game", source))
+        server.broadcastTextMessage(fmt.Sprintf("Player %d requested new game", source))
         return server.StartGame(*params)
     })
     server.registerHandler(protocol.MoveCommand, func(bytes []byte, source int) error { 
         if !server.gameRunning  {
-            sendTextMessage("Game not running. Cant make moves.", players[source])
+            sendTextMessage("Game not running. Cant make moves.", server.players[source])
             return nil
         }
-        board := server.game.board
         move, err := protocol.DecodeMove(bytes)
         if err != nil{
             return err
         }
-        moveResult, err := board.MakeMove(*move)
+        moveResult, err := server.game.MakeMove(*move)
         if err != nil {
             return err
         }
         if len(moveResult.UpdatedCells) > 0 {
-            cells, err := mines.CreateUpdatedCells(board, moveResult.UpdatedCells)
+            cells, err := server.game.CreateCellUpdates(moveResult.UpdatedCells)
             if err != nil {
                 return err
             }
@@ -229,7 +215,7 @@ func (server *Server) RegisterHandlers(){
             if err != nil{
                 return err
             }
-            broadcast(encoded)
+            server.broadcast(encoded)
         }
         var endMsg []byte
         switch moveResult.Result {
@@ -244,7 +230,7 @@ func (server *Server) RegisterHandlers(){
             return err
         }
         if endMsg != nil {
-            broadcast(endMsg)
+            server.broadcast(endMsg)
             server.gameRunning = false
         }
         return nil
@@ -267,10 +253,24 @@ func createServer(id int, name string) (*Server, error){
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
     }
-    messageHandlers := make(map[protocol.MessageType]MessageHandler)
-    ch := make(chan command)
+    handlers := make(map[protocol.MessageType]MessageHandler)
+    messageChannel := make(chan command)
 	port := listener.Addr().(*net.TCPAddr).Port
-    return &Server{id, name, listener, nil, false, messageHandlers, ch, uint16(port)}, nil
+	clients := make(map[int]bool)
+	players := make(map[int]*Player)
+    server := &Server{
+        id:             id,
+        Name:           name,
+        server:         listener,
+        game:           nil,
+        gameRunning:    false,
+        handlers:       handlers,
+        messageChannel: messageChannel,
+        Port:           uint16(port),
+        clients:        clients,
+        players:        players,
+    }
+    return server, nil
 }
 
 func serverLoop(server *Server){
@@ -282,8 +282,12 @@ func serverLoop(server *Server){
             println(err)
             return
         }
-        player := &Player{conn, id, true}
-        players[player.id] = player
+        player := &Player{
+			id: id,
+			client: conn,
+			connected: true,
+		}
+        server.players[player.id] = player
         go handleRequest(player, server)
         id++
     }
