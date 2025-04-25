@@ -29,7 +29,9 @@ func TestGameLaunchViaTCP(t *testing.T){
 	}
 	defer conn.Close()
 	for i := range(nServers) {
-		payload, err := protocol.EncodeSpawnServerRequest(fmt.Sprintf("Server %d", i), uint32(i))
+		id := uint32(i)
+
+		payload, err := protocol.EncodeSpawnServerRequest(fmt.Sprintf("Server %d", i), &id)
 		if err != nil {
 			t.Fatalf("Failed to encode game start request: %v", err)
 		}

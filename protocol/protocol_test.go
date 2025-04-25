@@ -33,11 +33,11 @@ func TestServerInfoMessageEncoding(t *testing.T){
 		{"FD Free", "10.0.0.5", 429, 0}, 
 	}
 	
-	encoded, err := protocol.EncodeSendGameServers(servers)
+	encoded, err := protocol.EncodeSendGameServers(servers, nil)
 	if err != nil {
 		t.Fatalf("Failed to encode game servers info: %v", err)
 	}
-	decoded, err := protocol.DecodeSendGameServers(encoded)
+	decoded, err := protocol.DecodeSendGameServers(encoded, nil)
 	if err != nil {
 		t.Fatalf("Failed to decode game servers info: %v", err)
 	}
