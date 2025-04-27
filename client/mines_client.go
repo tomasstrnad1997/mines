@@ -33,23 +33,53 @@ type BoardView struct {
     params mines.GameParams
 }
 
+
 type MessageHandler func([]byte) error
-var messageHandlers = make(map[protocol.MessageType]MessageHandler)
-func HandleMessage(bytes []byte) error {
+
+type Handler interface {
+	HandleMessage(bytes []byte) error
+}
+
+type ConnectionController struct {
+	server net.Conn
+	messageHandlers map[protocol.MessageType]MessageHandler
+	connected bool
+}
+
+func (controller *ConnectionController) HandleMessage(bytes []byte) error {
 
     msgType := protocol.MessageType(bytes[0])
-	handler, exists := messageHandlers[msgType]
+	handlerFunc, exists := controller.messageHandlers[msgType]
 	if !exists {
 		return fmt.Errorf("No handler registered for message type: %d", msgType)
 	}
-	return handler(bytes)
+	return handlerFunc(bytes)
 }
 
-func RegisterHandler(msgType protocol.MessageType, handler MessageHandler) {
-	messageHandlers[msgType] = handler
+func createConnectionController() *ConnectionController{
+	messageHandlers := make(map[protocol.MessageType]MessageHandler)
+	return &ConnectionController{messageHandlers: messageHandlers, connected: false}
 }
-func createClient(servAddr string) (*net.TCPConn, error){
-    tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
+
+func (controller *ConnectionController) Connect(host string, port uint16) error{
+	if controller.connected {
+		return fmt.Errorf("Connector already connected")
+	}
+	server, err := connectUsingTcp(host, port)
+	if err != nil {
+		return err
+	}
+	controller.connected = true
+	controller.server = server
+	return nil
+}
+
+func (controller *ConnectionController) RegisterHandler(msgType protocol.MessageType, handlerFunc MessageHandler) {
+	controller.messageHandlers[msgType] = handlerFunc
+}
+
+func connectUsingTcp(host string, port uint16) (*net.TCPConn, error){
+	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port))
     if err != nil {
         println("Reslove tpc failed:")
         return nil, err
@@ -64,8 +94,8 @@ func createClient(servAddr string) (*net.TCPConn, error){
     return conn, nil
 }
 
-func ReadServerResponse(client net.Conn) error{
-    reader := bufio.NewReader(client)
+func (controller *ConnectionController) ReadServerResponse() error{
+    reader := bufio.NewReader(controller.server)
     for {
         header := make([]byte, protocol.HeaderLength)
 		bytesRead, err := reader.Read(header)
@@ -82,7 +112,7 @@ func ReadServerResponse(client net.Conn) error{
         if err != nil {
             return err
         }
-        err = HandleMessage(message)    
+        err = controller.HandleMessage(message)    
         if err != nil {
             println(err.Error())
         }
@@ -134,9 +164,10 @@ type Cell struct {
 
 
 type GameManager struct {
-    server *net.TCPConn
     grid [][]Cell
     params mines.GameParams
+    gameController *ConnectionController
+	matchmakingController *ConnectionController
 }
 
 const (
@@ -184,7 +215,7 @@ func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *Ga
     if err != nil {
         return err
     }
-    _, err = manager.server.Write(encoded)
+    _, err = manager.gameController.server.Write(encoded)
     if err != nil {
         return err
     }
@@ -338,19 +369,17 @@ func drawEndGame(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dime
     )
 })
 }
-
-func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
-    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
+func (manager *GameManager) connectToGameServer(w *app.Window, menu *Menu, host string, port uint16){
+	fmt.Printf("Connecting to %s:%d\n", host, port)
     go func() {
         menu.connecting = true
-        client, err := createClient(menu.ipEditor.Text()+":42069")
+        err := manager.gameController.Connect(host, port)
         if err != nil {
             println(err.Error())
         }else{
-            manager.server = client
             menu.state = GameStartMenu
             go func() {
-                err := ReadServerResponse(client)
+                err := manager.gameController.ReadServerResponse()
                 if err != nil {
                     println(err.Error())
                 }
@@ -363,6 +392,22 @@ func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
     }()
 }
 
+func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
+	manager.connectToGameServer(w, menu, menu.ipEditor.Text(), 42069)
+}
+
+func (manager *GameManager) connectToMatchmaking(host string, port uint16) (error) {
+	err := manager.gameController.Connect(host, port)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (manager *GameManager) HandleResponses() {
+
+}
+
 func handleStartGameButton(menu *Menu, manager *GameManager){
     width, errw := strconv.Atoi(menu.widthEditor.Text())
     height, errh := strconv.Atoi(menu.heightEditor.Text())
@@ -373,7 +418,7 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
         if err != nil {
             println(err.Error())
         }else{
-            manager.server.Write(encoded)
+            manager.gameController.server.Write(encoded)
         }
     }
 }
@@ -392,8 +437,23 @@ func initializeGrid(manager *GameManager) {
 
 }
 
-func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
-    RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
+func RegisterMMHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *ConnectionController){
+    controller.RegisterHandler(protocol.SendGameServers, func(bytes []byte) error { 
+		infos, err := protocol.DecodeSendGameServers(bytes, nil)
+		if err != nil {
+			return err
+		}
+		rows := make([]*GameServerRow, len(infos))
+		for i, info := range infos {
+			rows[i] = &GameServerRow{info: info}
+		}
+		menu.browser.servers = rows
+		return nil
+    })
+}
+
+func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *ConnectionController){
+    controller.RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
         endType, err := protocol.DecodeGameEnd(bytes)
         if err != nil {
             return err
@@ -401,7 +461,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         menu.gameEndResult = endType
         return nil
     })
-    RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
+    controller.RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
         msg, err := protocol.DecodeTextMessage(bytes)
         if err != nil{
             return err
@@ -409,7 +469,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         println(msg)
         return nil     
     })
-    RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
+    controller.RegisterHandler(protocol.StartGame, func(bytes []byte) error { 
         params, err := protocol.DecodeGameStart(bytes)
         if err != nil{
             return err
@@ -421,7 +481,7 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu){
         w.Invalidate()
         return nil     
     })
-    RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
+    controller.RegisterHandler(protocol.CellUpdate, func(bytes []byte) error { 
         updates, err := protocol.DecodeCellUpdates(bytes)
         if err != nil{
             return err
@@ -454,7 +514,7 @@ func handleRestartButton(manager *GameManager) {
     if err != nil {
         println(err.Error())
     }else{
-        manager.server.Write(encoded)
+        manager.gameController.server.Write(encoded)
     }
 }
 
@@ -463,28 +523,7 @@ func handleNewGameButton(menu *Menu) {
 }
 
 func handleBrowserConnectButton(w *app.Window, menu *Menu, manager *GameManager, server *GameServerRow){
-    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
-    go func() {
-        menu.connecting = true
-		ip := fmt.Sprintf("%s:%d", server.info.Host, server.info.Port)
-        client, err := createClient(ip)
-        if err != nil {
-            println(err.Error())
-        }else{
-            manager.server = client
-            menu.state = GameStartMenu
-            go func() {
-                err := ReadServerResponse(client)
-                if err != nil {
-                    println(err.Error())
-                }
-                menu.state = ConnectMenu
-                w.Invalidate()
-            }()
-        }
-        w.Invalidate()
-        menu.connecting = false
-    }()
+	manager.connectToGameServer(w, menu, server.info.Host, server.info.Port)
 }
 
 
@@ -509,10 +548,26 @@ func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *G
 	}
 }
 
-func mailLoop(w *app.Window, th *material.Theme, menu *Menu) error {
+func mainLoop(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
-        manager := &GameManager{}
-        RegisterGUIHandlers(w, manager, menu)
+        manager := &GameManager{
+			gameController: createConnectionController(),
+			matchmakingController: createConnectionController(),
+		}
+		RegisterMMHandlers(w, manager, menu, manager.matchmakingController)
+        RegisterGUIHandlers(w, manager, menu, manager.gameController)
+
+		manager.matchmakingController.Connect("localhost", 42071)
+		go manager.matchmakingController.ReadServerResponse()
+		encoded, err := protocol.EncodeGetGameServers(nil)
+		if err != nil {
+			return err
+		}
+		_, err = manager.matchmakingController.server.Write(encoded)
+		if err != nil {
+			return err
+		}
+		
         for {
             switch windowEvent := w.Event().(type){
             case app.FrameEvent:
@@ -540,12 +595,7 @@ func RunClient() {
         w := new(app.Window)
         w.Option(app.Title("PogySweeper"))
         th := material.NewTheme()
-		var servers = []*GameServerRow{
-			{info: protocol.GameServerInfo{Name: "Server 1", PlayerCount: 3, Host: "mines.strnadt.cz", Port: 42069}},
-			{info: protocol.GameServerInfo{Name: "Server 2", PlayerCount: 3, Host: "localhost", Port: 42070}},
-			{info: protocol.GameServerInfo{Name: "Server 3", PlayerCount: 3, Host: "127.0.0.1", Port: 42069}},
-				
-		}
+		var servers = []*GameServerRow{}
 		browser := &GameBrowserMenu{
 			servers: servers,
 			list : layout.List{Axis: layout.Vertical},
@@ -563,7 +613,7 @@ func RunClient() {
         menu.minesEditor.SetText("9")
         menu.minesEditor.SingleLine = true
 
-        err := mailLoop(w, th, menu)
+        err := mainLoop(w, th, menu)
         if err != nil {
             print(err.Error())
         }

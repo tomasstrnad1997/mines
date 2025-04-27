@@ -23,7 +23,7 @@ type GameBrowserMenu struct {
 }
 
 type GameServerRow struct {
-	info protocol.GameServerInfo
+	info *protocol.GameServerInfo
 	ConnectButton widget.Clickable	
 
 }
