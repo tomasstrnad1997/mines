@@ -247,15 +247,15 @@ func (server *Server) manageCommands(){
     }
 }
 
-func createServer(id int, name string) (*Server, error){
-	listener, err := net.Listen("tcp", "0.0.0.0:0")
+func createServer(id int, name string, port uint16) (*Server, error){
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
     if err != nil {
         fmt.Println("Failed to start server:", err.Error())
         return nil, err
     }
     handlers := make(map[protocol.MessageType]MessageHandler)
     messageChannel := make(chan command)
-	port := listener.Addr().(*net.TCPAddr).Port
+	serverPort := listener.Addr().(*net.TCPAddr).Port
 	clients := make(map[int]bool)
 	players := make(map[int]*Player)
     server := &Server{
@@ -266,7 +266,7 @@ func createServer(id int, name string) (*Server, error){
         gameRunning:    false,
         handlers:       handlers,
         messageChannel: messageChannel,
-        Port:           uint16(port),
+        Port:           uint16(serverPort),
         clients:        clients,
         players:        players,
     }
@@ -293,8 +293,8 @@ func serverLoop(server *Server){
     }
 }
 
-func SpawnServer(id int, name string) (*Server, error){
-    server, err := createServer(id, name)
+func SpawnServer(id int, name string, port uint16) (*Server, error){
+    server, err := createServer(id, name, port)
     if err != nil {
         return nil, err
     }
@@ -304,7 +304,3 @@ func SpawnServer(id int, name string) (*Server, error){
 	return server, nil
 }
 
-
-func main() {
-    SpawnServer(0, "Default Server")
-}

@@ -27,7 +27,7 @@ type GameLauncher struct {
 }
 
 func (launcher *GameLauncher) SpawnNewGameServer(name string) (*server.Server, error){
-	server, err := server.SpawnServer(launcher.nextServerId, name)
+	server, err := server.SpawnServer(launcher.nextServerId, name, 0)
 	if err != nil {
 		return nil, err
 	}
