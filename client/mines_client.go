@@ -94,6 +94,7 @@ type AppState int
 
 const (
     ConnectMenu AppState = iota
+	BrowserMenu
     GameStartMenu
     GameScreen
 )
@@ -117,6 +118,8 @@ type Menu struct {
     newGameButton widget.Clickable
 
     state AppState
+
+	browser *GameBrowserMenu
 
 }
 
@@ -236,31 +239,6 @@ func drawMark(mark string, ops *op.Ops, th *material.Theme, gtx layout.Context) 
     
 }
 
-func drawConnectMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{
-			Axis:    layout.Vertical,
-			Spacing: layout.SpaceAround,
-		}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Editor(th, &menu.ipEditor, "IP Address").Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Spacer{Height: unit.Dp(16)}.Layout(gtx) // Add spacing
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                btn :=  material.Button(th, &menu.connectButton, "Connect")
-                return btn.Layout(gtx) 
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if menu.connecting {
-					return material.Label(th, unit.Sp(16), fmt.Sprintf("Connecting to %s", menu.ipEditor.Text())).Layout(gtx)
-				}
-				return layout.Dimensions{}
-			}),
-		)
-	})
-}
 
 func drawConfigMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -391,7 +369,7 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
     nMines, errm := strconv.Atoi(menu.minesEditor.Text())
     if errw != nil || errh != nil || errm != nil {
     }else {
-        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines, GameMode: mines.Classic})
+        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines, GameMode: mines.ModeClassic})
         if err != nil {
             println(err.Error())
         }else{
@@ -480,8 +458,55 @@ func handleRestartButton(manager *GameManager) {
     }
 }
 
-func handleNEwGameButton(menu *Menu) {
+func handleNewGameButton(menu *Menu) {
     menu.state = GameStartMenu
+}
+
+func handleBrowserConnectButton(w *app.Window, menu *Menu, manager *GameManager, server *GameServerRow){
+    fmt.Printf("Connecting to %s\n", menu.ipEditor.Text())
+    go func() {
+        menu.connecting = true
+		ip := fmt.Sprintf("%s:%d", server.info.Host, server.info.Port)
+        client, err := createClient(ip)
+        if err != nil {
+            println(err.Error())
+        }else{
+            manager.server = client
+            menu.state = GameStartMenu
+            go func() {
+                err := ReadServerResponse(client)
+                if err != nil {
+                    println(err.Error())
+                }
+                menu.state = ConnectMenu
+                w.Invalidate()
+            }()
+        }
+        w.Invalidate()
+        menu.connecting = false
+    }()
+}
+
+
+func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *GameManager) {
+	if menu.connectButton.Clicked(gtx){
+		handleConnectButton(w, menu, manager)
+	}
+	if menu.startButton.Clicked(gtx) {
+		handleStartGameButton(menu, manager)
+	}
+	if menu.restartButton.Clicked(gtx){
+		handleRestartButton(manager)
+	}
+	if menu.newGameButton.Clicked(gtx){
+		handleNewGameButton(menu)
+	}
+
+	for _, server := range menu.browser.servers {
+		if server.ConnectButton.Clicked(gtx){
+			handleBrowserConnectButton(w, menu, manager, server)
+		}
+	}
 }
 
 func mailLoop(w *app.Window, th *material.Theme, menu *Menu) error {
@@ -492,21 +517,10 @@ func mailLoop(w *app.Window, th *material.Theme, menu *Menu) error {
             switch windowEvent := w.Event().(type){
             case app.FrameEvent:
                 gtx := app.NewContext(&ops, windowEvent)
-                if menu.connectButton.Clicked(gtx){
-                    handleConnectButton(w, menu, manager)
-                }
-                if menu.startButton.Clicked(gtx) {
-                    handleStartGameButton(menu, manager)
-                }
-                if menu.restartButton.Clicked(gtx){
-                    handleRestartButton(manager)
-                }
-                if menu.newGameButton.Clicked(gtx){
-                    handleNEwGameButton(menu)
-                }
+				handleMenuButtons(gtx, w, menu, manager)
                 switch menu.state {
                 case ConnectMenu:
-                    drawConnectMenu(gtx, th, menu)
+                    drawBrowserMenu(gtx, th, menu)
                 case GameStartMenu:
                     drawConfigMenu(gtx, th, menu)
                 case GameScreen:
@@ -526,9 +540,19 @@ func RunClient() {
         w := new(app.Window)
         w.Option(app.Title("PogySweeper"))
         th := material.NewTheme()
-
+		var servers = []*GameServerRow{
+			{info: protocol.GameServerInfo{Name: "Server 1", PlayerCount: 3, Host: "mines.strnadt.cz", Port: 42069}},
+			{info: protocol.GameServerInfo{Name: "Server 2", PlayerCount: 3, Host: "localhost", Port: 42070}},
+			{info: protocol.GameServerInfo{Name: "Server 3", PlayerCount: 3, Host: "127.0.0.1", Port: 42069}},
+				
+		}
+		browser := &GameBrowserMenu{
+			servers: servers,
+			list : layout.List{Axis: layout.Vertical},
+			}
         menu := &Menu{
             state: ConnectMenu,
+			browser: browser,
         }
         // menu.ipEditor.SetText("127.0.0.1")
         menu.ipEditor.SingleLine = true
