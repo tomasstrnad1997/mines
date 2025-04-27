@@ -34,17 +34,9 @@ func drawHeader(gtx layout.Context, th *material.Theme) layout.Dimensions {
     return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(16), Right: unit.Dp(16), Bottom: unit.Dp(8)}.Layout(gtx,
         func(gtx layout.Context) layout.Dimensions {
             ops := gtx.Ops
-
-            rr := clip.RRect{
-                Rect: image.Rect(0, 0, gtx.Constraints.Max.X, 40),
-                SE: 8,
-                SW: 8,
-                NE: 8,
-                NW: 8,
-            }
-            paint.FillShape(ops, color.NRGBA{R: 200, G: 200, B: 200, A: 255}, rr.Op(ops))
+			macro := op.Record(ops)
 			dims := layout.UniformInset(unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-                return layout.Flex{
+				return layout.Flex{
                     Alignment: layout.Middle,
                 }.Layout(gtx,
                     layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -58,7 +50,17 @@ func drawHeader(gtx layout.Context, th *material.Theme) layout.Dimensions {
                         return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
                     }),
                 )
-            })
+			})
+			call := macro.Stop()
+            rr := clip.RRect{
+                Rect: image.Rect(0, 0, gtx.Constraints.Max.X, dims.Size.Y),
+                SE: 8,
+                SW: 8,
+                NE: 8,
+                NW: 8,
+            }
+            paint.FillShape(ops, color.NRGBA{R: 200, G: 200, B: 200, A: 255}, rr.Op(ops))
+			call.Add(ops)
 			return dims
         })
 }
@@ -108,9 +110,12 @@ func drawBrowserMenu(gtx layout.Context, th *material.Theme, menu *Menu){
 	layout.Flex{
 		Axis: layout.Vertical,
 	}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return drawHeader(gtx, th)
+	}),
 		layout.Flexed(1, func(ftx layout.Context) layout.Dimensions {
-			return menu.browser.list.Layout(ftx, len(menu.browser.servers), func(htx layout.Context, i int) layout.Dimensions {
-				return drawServerRow(htx, th, menu.browser.servers[i])
+			return menu.browser.list.Layout(gtx, len(menu.browser.servers), func(gtx layout.Context, i int) layout.Dimensions {
+				return drawServerRow(gtx, th, menu.browser.servers[i])
 			})
 		}),
 	)
