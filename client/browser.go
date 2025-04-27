@@ -19,6 +19,8 @@ type GameBrowserMenu struct {
 	SpawServerButton widget.Clickable
 	servers []*GameServerRow
 	list layout.List 
+    spawnButton widget.Clickable
+    refreshButton widget.Clickable
 
 }
 
@@ -30,7 +32,7 @@ type GameServerRow struct {
 
 
 // Couldnt make it work just discard it
-func drawHeader(gtx layout.Context, th *material.Theme) layout.Dimensions {
+func drawHeader(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
     return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(16), Right: unit.Dp(16), Bottom: unit.Dp(8)}.Layout(gtx,
         func(gtx layout.Context) layout.Dimensions {
             ops := gtx.Ops
@@ -48,6 +50,14 @@ func drawHeader(gtx layout.Context, th *material.Theme) layout.Dimensions {
                     }),
                     layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
                         return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
+                    }),
+                    layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                        btn := material.Button(th, &menu.browser.refreshButton, "Refresh")
+                        return btn.Layout(gtx)
+                    }),
+                    layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                        btn := material.Button(th, &menu.browser.spawnButton, "Spawn")
+                        return btn.Layout(gtx)
                     }),
                 )
 			})
@@ -111,7 +121,7 @@ func drawBrowserMenu(gtx layout.Context, th *material.Theme, menu *Menu){
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return drawHeader(gtx, th)
+		return drawHeader(gtx, th, menu)
 	}),
 		layout.Flexed(1, func(ftx layout.Context) layout.Dimensions {
 			return menu.browser.list.Layout(gtx, len(menu.browser.servers), func(gtx layout.Context, i int) layout.Dimensions {

@@ -396,18 +396,6 @@ func handleConnectButton(w *app.Window, menu *Menu, manager *GameManager){
 	manager.connectToGameServer(w, menu, menu.ipEditor.Text(), 42069)
 }
 
-func (manager *GameManager) connectToMatchmaking(host string, port uint16) (error) {
-	err := manager.gameController.Connect(host, port)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (manager *GameManager) HandleResponses() {
-
-}
-
 func handleStartGameButton(menu *Menu, manager *GameManager){
     width, errw := strconv.Atoi(menu.widthEditor.Text())
     height, errh := strconv.Atoi(menu.heightEditor.Text())
@@ -448,6 +436,14 @@ func RegisterMMHandlers(w *app.Window, manager *GameManager, menu *Menu, control
 			rows[i] = &GameServerRow{info: info}
 		}
 		menu.browser.servers = rows
+		return nil
+    })
+    controller.RegisterHandler(protocol.ServerSpawned, func(bytes []byte) error { 
+		info, err := protocol.DecodeServerSpawned(bytes, nil)
+		if err != nil {
+			return err
+		}
+		menu.browser.servers = append(menu.browser.servers, &GameServerRow{info: info})
 		return nil
     })
 }
@@ -526,6 +522,30 @@ func handleBrowserConnectButton(w *app.Window, menu *Menu, manager *GameManager,
 	manager.connectToGameServer(w, menu, server.info.Host, server.info.Port)
 }
 
+func (manager *GameManager) refreshServers() error {
+	encoded, err := protocol.EncodeGetGameServers(nil)
+	if err != nil {
+		return err
+	}
+	_, err = manager.matchmakingController.server.Write(encoded)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (manager *GameManager) spawnServer() error {
+	encoded, err := protocol.EncodeSpawnServerRequest("TEMPORARY SERVER NAME", nil)
+	if err != nil {
+		return err
+	}
+	_, err = manager.matchmakingController.server.Write(encoded)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 
 func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *GameManager) {
 	if menu.connectButton.Clicked(gtx){
@@ -546,6 +566,13 @@ func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *G
 			handleBrowserConnectButton(w, menu, manager, server)
 		}
 	}
+
+	if menu.browser.refreshButton.Clicked(gtx) {
+		manager.refreshServers()
+	}
+	if menu.browser.spawnButton.Clicked(gtx) {
+		manager.spawnServer()
+	}
 }
 
 func mainLoop(w *app.Window, th *material.Theme, menu *Menu) error {
@@ -559,14 +586,6 @@ func mainLoop(w *app.Window, th *material.Theme, menu *Menu) error {
 
 		manager.matchmakingController.Connect("localhost", 42071)
 		go manager.matchmakingController.ReadServerResponse()
-		encoded, err := protocol.EncodeGetGameServers(nil)
-		if err != nil {
-			return err
-		}
-		_, err = manager.matchmakingController.server.Write(encoded)
-		if err != nil {
-			return err
-		}
 		
         for {
             switch windowEvent := w.Event().(type){
