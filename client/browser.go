@@ -21,6 +21,7 @@ type GameBrowserMenu struct {
 	list layout.List 
     spawnButton widget.Clickable
     refreshButton widget.Clickable
+	serverName widget.Editor
 
 }
 
@@ -30,14 +31,48 @@ type GameServerRow struct {
 
 }
 
+func drawSpawnServerMenu(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
+    return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(16), Right: unit.Dp(16), Bottom: unit.Dp(8)}.Layout(gtx,
+        func(gtx layout.Context) layout.Dimensions {
+            ops := gtx.Ops
+			macro := op.Record(ops)
+			dims := layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{
+                    Alignment: layout.Middle,
+                }.Layout(gtx,
+                    layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+                        return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
+                    }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return material.Editor(th, &menu.browser.serverName, "Server Name").Layout(gtx)
+					}),
+                    layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
+                    layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                        btn := material.Button(th, &menu.browser.spawnButton, "Spawn")
+                        return btn.Layout(gtx)
+                    }),
+                )
+			})
+			call := macro.Stop()
+            rr := clip.RRect{
+                Rect: image.Rect(0, 0, gtx.Constraints.Max.X, dims.Size.Y),
+                SE: 8,
+                SW: 8,
+                NE: 8,
+                NW: 8,
+            }
+            paint.FillShape(ops, color.NRGBA{R: 200, G: 200, B: 200, A: 255}, rr.Op(ops))
+			call.Add(ops)
+			return dims
+        })
+}
 
-// Couldnt make it work just discard it
 func drawHeader(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimensions {
     return layout.Inset{Top: unit.Dp(8), Left: unit.Dp(16), Right: unit.Dp(16), Bottom: unit.Dp(8)}.Layout(gtx,
         func(gtx layout.Context) layout.Dimensions {
             ops := gtx.Ops
 			macro := op.Record(ops)
-			dims := layout.UniformInset(unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			dims := layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{
                     Alignment: layout.Middle,
                 }.Layout(gtx,
@@ -45,18 +80,15 @@ func drawHeader(gtx layout.Context, th *material.Theme, menu *Menu) layout.Dimen
                         return material.Body1(th, "Server").Layout(gtx)
                     }),
                     layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
-                    layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                        return material.Body1(th,"Players").Layout(gtx)
-                    }),
                     layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
                         return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
                     }),
                     layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                        btn := material.Button(th, &menu.browser.refreshButton, "Refresh")
-                        return btn.Layout(gtx)
+                        return material.Body1(th,"Players").Layout(gtx)
                     }),
+                    layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
                     layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-                        btn := material.Button(th, &menu.browser.spawnButton, "Spawn")
+                        btn := material.Button(th, &menu.browser.refreshButton, "Refresh")
                         return btn.Layout(gtx)
                     }),
                 )
@@ -81,7 +113,7 @@ func drawServerRow(gtx layout.Context, th *material.Theme, server *GameServerRow
             ops := gtx.Ops
 			macro := op.Record(ops)
 
-			dims := layout.UniformInset(unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			dims := layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
                 return layout.Flex{
                     Alignment: layout.Middle,
                 }.Layout(gtx,
@@ -89,13 +121,14 @@ func drawServerRow(gtx layout.Context, th *material.Theme, server *GameServerRow
                         return material.Body1(th, server.info.Name).Layout(gtx)
                     }),
                     layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
+                    layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+                        return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
+                    }),
                     layout.Rigid(func(gtx layout.Context) layout.Dimensions {
                         return material.Body1(th,
                             fmt.Sprintf("%d", server.info.PlayerCount)).Layout(gtx)
                     }),
-                    layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-                        return layout.Spacer{Width: unit.Dp(0)}.Layout(gtx)
-                    }),
+                    layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
                     layout.Rigid(func(gtx layout.Context) layout.Dimensions {
                         btn := material.Button(th, &server.ConnectButton, "Connect")
                         return btn.Layout(gtx)
@@ -121,8 +154,11 @@ func drawBrowserMenu(gtx layout.Context, th *material.Theme, menu *Menu){
 		Axis: layout.Vertical,
 	}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return drawHeader(gtx, th, menu)
-	}),
+			return drawSpawnServerMenu(gtx, th, menu)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return drawHeader(gtx, th, menu)
+		}),
 		layout.Flexed(1, func(ftx layout.Context) layout.Dimensions {
 			return menu.browser.list.Layout(gtx, len(menu.browser.servers), func(gtx layout.Context, i int) layout.Dimensions {
 				return drawServerRow(gtx, th, menu.browser.servers[i])

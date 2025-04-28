@@ -73,7 +73,7 @@ func (controller *ConnectionController) SendMessage(message []byte) error{
 
 func createConnectionController() *ConnectionController{
 	messageHandlers := make(map[protocol.MessageType]MessageHandler)
-	channel := make(chan []byte, 3)
+	channel := make(chan []byte, 64)
 	controller := &ConnectionController{messageHandlers: messageHandlers, connected: false, messageChannel: channel}
 	return controller
 }
@@ -568,8 +568,8 @@ func (manager *GameManager) refreshServers() error {
 	return nil
 }
 
-func (manager *GameManager) spawnServer() error {
-	encoded, err := protocol.EncodeSpawnServerRequest("TEMPORARY SERVER NAME", nil)
+func (manager *GameManager) spawnServer(name string) error {
+	encoded, err := protocol.EncodeSpawnServerRequest(name, nil)
 	if err != nil {
 		return err
 	}
@@ -604,7 +604,7 @@ func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *G
 		manager.refreshServers()
 	}
 	if menu.browser.spawnButton.Clicked(gtx) {
-		manager.spawnServer()
+		manager.spawnServer(menu.browser.serverName.Text())
 	}
 }
 
