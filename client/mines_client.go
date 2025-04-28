@@ -43,22 +43,48 @@ type Handler interface {
 type ConnectionController struct {
 	server net.Conn
 	messageHandlers map[protocol.MessageType]MessageHandler
+	messageChannel chan []byte
 	connected bool
 }
 
-func (controller *ConnectionController) HandleMessage(bytes []byte) error {
+func (controller *ConnectionController) StartWriter() {
+	go func() {
+		for {
+			select {
+			case message := <-controller.messageChannel:
+				_, err := controller.server.Write(message)
+				if err != nil {
+					fmt.Println("Error writing to server:", err)
+					return
+				}
+			}
+		}
+	}()
+}
 
+func (controller *ConnectionController) SendMessage(message []byte) error{
+	select {
+		case controller.messageChannel <- message:
+		default:
+			return fmt.Errorf("Failed to write to message channel")
+	}
+	return nil
+}
+
+func createConnectionController() *ConnectionController{
+	messageHandlers := make(map[protocol.MessageType]MessageHandler)
+	channel := make(chan []byte, 3)
+	controller := &ConnectionController{messageHandlers: messageHandlers, connected: false, messageChannel: channel}
+	return controller
+}
+
+func (controller *ConnectionController) HandleMessage(bytes []byte) error {
     msgType := protocol.MessageType(bytes[0])
 	handlerFunc, exists := controller.messageHandlers[msgType]
 	if !exists {
 		return fmt.Errorf("No handler registered for message type: %d", msgType)
 	}
 	return handlerFunc(bytes)
-}
-
-func createConnectionController() *ConnectionController{
-	messageHandlers := make(map[protocol.MessageType]MessageHandler)
-	return &ConnectionController{messageHandlers: messageHandlers, connected: false}
 }
 
 func (controller *ConnectionController) Connect(host string, port uint16) error{
@@ -71,6 +97,7 @@ func (controller *ConnectionController) Connect(host string, port uint16) error{
 	}
 	controller.connected = true
 	controller.server = server
+	controller.StartWriter()
 	return nil
 }
 
@@ -215,7 +242,8 @@ func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *Ga
     if err != nil {
         return err
     }
-    _, err = manager.gameController.server.Write(encoded)
+
+    err = manager.gameController.SendMessage(encoded)
     if err != nil {
         return err
     }
@@ -406,7 +434,10 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
         if err != nil {
             println(err.Error())
         }else{
-            manager.gameController.server.Write(encoded)
+    		err = manager.gameController.SendMessage(encoded)
+			if err != nil {
+				println(err.Error())
+			}
         }
     }
 }
@@ -510,7 +541,10 @@ func handleRestartButton(manager *GameManager) {
     if err != nil {
         println(err.Error())
     }else{
-        manager.gameController.server.Write(encoded)
+        err = manager.gameController.SendMessage(encoded)
+		if err != nil {
+			println(err.Error())
+		}
     }
 }
 
@@ -527,7 +561,7 @@ func (manager *GameManager) refreshServers() error {
 	if err != nil {
 		return err
 	}
-	_, err = manager.matchmakingController.server.Write(encoded)
+	err = manager.matchmakingController.SendMessage(encoded)
 	if err != nil {
 		return err
 	}
@@ -539,8 +573,7 @@ func (manager *GameManager) spawnServer() error {
 	if err != nil {
 		return err
 	}
-	_, err = manager.matchmakingController.server.Write(encoded)
-	if err != nil {
+	if err = manager.matchmakingController.SendMessage(encoded);err != nil {
 		return err
 	}
 	return nil
