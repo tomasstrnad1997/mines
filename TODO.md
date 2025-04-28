@@ -25,10 +25,10 @@
         * If the matchmaking server resets it needs to sync with currently running game
     * Option to connect by game server name + password
 * Game Server Launcher
+    * Layer between matchmaking server and game server
     * For official games create a game lancher that spawns game servers
     * Can run on any number of machines
         * MM server either gets their locations from database or game server can connect to MM server and announce itself (unoficiall game server)
-    * Layer between matchmaking server and game server
 * Game Server
     * Server names
     * Public/private
@@ -36,3 +36,4 @@
     * ?Whitelist friends?
 * Protocol
     * Consider writing length at the end by owerwriting byte 3 and 4 in header
+* Move connection controller to ?protocol? so it can be used everywhere and connections are handled the same everywhere
