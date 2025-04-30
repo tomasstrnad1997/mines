@@ -202,7 +202,8 @@ func (server *Server) RegisterHandlers(){
         if err != nil{
             return err
         }
-        moveResult, err := server.game.MakeMove(*move)
+		move.PlayerId = source
+        moveResult, gamemodeInfo, err := server.game.MakeMove(*move)
         if err != nil {
             return err
         }
@@ -216,6 +217,13 @@ func (server *Server) RegisterHandlers(){
                 return err
             }
             server.broadcast(encoded)
+			if gamemodeInfo != nil {
+				encoded, err = protocol.EncodeGamemodeInfo(gamemodeInfo)
+				if err != nil{
+					return err
+				}
+            	server.broadcast(encoded)
+			}
         }
         var endMsg []byte
         switch moveResult.Result {
@@ -275,7 +283,7 @@ func createServer(id int, name string, port uint16) (*Server, error){
 
 func serverLoop(server *Server){
     defer server.server.Close()
-    id := 0
+    id := 1
     for {
         conn, err := server.server.Accept()
         if err != nil {

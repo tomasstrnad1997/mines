@@ -12,6 +12,7 @@ func (c *Classic) GameModeId() GameModeId {
 	return ModeClassic
 }
 
-func (c *Classic) OnMove(b *Board, move Move, result *MoveResult) error {
-	return nil
+func (c *Classic) OnMove(b *Board, move Move, result *MoveResult) (GamemodeUpdateInfo, error) {
+	return nil, nil
 }
+

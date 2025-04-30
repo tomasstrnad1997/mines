@@ -192,6 +192,7 @@ type Cell struct {
 
 type GameManager struct {
     grid [][]Cell
+    cellColorGrid [][]int
     params mines.GameParams
     gameController *ConnectionController
 	matchmakingController *ConnectionController
@@ -208,6 +209,30 @@ const (
     SecondaryButton
 )
 
+func (manager *GameManager) HandleGamemodeUpdateInfo(info mines.GamemodeUpdateInfo) error {
+	gameModeId := info.GetGameModeId()
+	switch gameModeId{
+	case mines.ModeCoop:
+		i, ok := info.(*mines.CoopInfoUpdate)
+		if !ok {
+			return fmt.Errorf("Failed to cast to CoopInfoUpdate")
+		}
+		if err := manager.ApplyCoopUpdateInfo(i); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("Unknown GameId: %d", gameModeId)
+	}
+	return nil
+}
+
+func (manager *GameManager) ApplyCoopUpdateInfo(info *mines.CoopInfoUpdate) error {
+	for _, cellInfo := range info.MarksChange {
+		manager.cellColorGrid[cellInfo.X][cellInfo.Y] = cellInfo.PlayerId
+	}
+	return nil
+}
+
 func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q input.Source, th *material.Theme, gtx layout.Context ) {
     size := image.Point{X:cell_size, Y:cell_size }
     r := image.Rectangle{Max: size}
@@ -223,7 +248,23 @@ func createCell(cell_size int, manager *GameManager, cell *Cell, ops *op.Ops, q 
      
     paint.ColorOp{Color: c}.Add(ops)
     paint.PaintOp{}.Add(ops)
+	overlayColor := getOverlayColor(cell, manager)
+    paint.ColorOp{Color: overlayColor}.Add(ops)
+    paint.PaintOp{}.Add(ops)
     drawMark(mark, ops, th, gtx)
+}
+
+func getOverlayColor(cell *Cell, manager *GameManager) color.NRGBA{
+	playerId := manager.cellColorGrid[cell.x][cell.y]
+	switch playerId{
+	case 1:
+		return color.NRGBA{R: 0xAA, G: 0x00, B: 0x00, A: 0x40} 
+	case 2:
+		return color.NRGBA{R: 0x00, G: 0xAA, B: 0x00, A: 0x40} 
+	default:
+		return color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0x00} 
+	}
+
 }
 
 func handleCellPressed(buttonPressed pressedMouseButton, cell *Cell, manager *GameManager) error {
@@ -430,7 +471,7 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
     nMines, errm := strconv.Atoi(menu.minesEditor.Text())
     if errw != nil || errh != nil || errm != nil {
     }else {
-        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines, GameMode: mines.ModeClassic})
+        encoded, err := protocol.EncodeGameStart(mines.GameParams{Width: width, Height: height, Mines: nMines, GameMode: mines.ModeCoop})
         if err != nil {
             println(err.Error())
         }else{
@@ -444,9 +485,11 @@ func handleStartGameButton(menu *Menu, manager *GameManager){
 
 func initializeGrid(manager *GameManager) {
     boardMutex.Lock()
+	manager.cellColorGrid = make([][]int, manager.params.Width)
     manager.grid = make([][]Cell, manager.params.Width)
     for i := range manager.params.Width {
         manager.grid[i] = make([]Cell, manager.params.Height)
+        manager.cellColorGrid[i] = make([]int, manager.params.Height)
         for j := range manager.params.Height {
             manager.grid[i][j].x = i
             manager.grid[i][j].y = j
@@ -487,6 +530,16 @@ func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu, contro
         }
         menu.gameEndResult = endType
         return nil
+    })
+    controller.RegisterHandler(protocol.GamemodeInfo, func(bytes []byte) error { 
+        info, err := protocol.DecodeGamemodeInfo(bytes)
+        if err != nil{
+            return err
+        }
+		if err = manager.HandleGamemodeUpdateInfo(info); err != nil {
+			return err
+		}
+        return nil     
     })
     controller.RegisterHandler(protocol.TextMessage, func(bytes []byte) error { 
         msg, err := protocol.DecodeTextMessage(bytes)

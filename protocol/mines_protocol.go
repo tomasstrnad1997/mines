@@ -19,6 +19,7 @@ const (
     CellUpdate = 0x05
     RequestReload = 0x06
     GameEnd = 0x07
+	GamemodeInfo = 0x08
 
 	SpawnServerRequest = 0xA0
 	SendGameServers = 0xA1
@@ -410,10 +411,12 @@ func EncodeMove(move mines.Move)([]byte, error){
     buf.WriteByte(byte(MoveCommand))
     // Reserved byte for future use
     buf.WriteByte(byte(0x00))
-    payload := make([]byte, 9)
+    payload := make([]byte, 13)
     payload[0] = byte(move.Type);
     copy(payload[1:5], intToBytes(move.X))
     copy(payload[5:9], intToBytes(move.Y))
+    copy(payload[9:13], intToBytes(move.PlayerId))
+
     err := writeLength(&buf, len(payload))
     if err != nil {
         return nil, err
@@ -433,6 +436,7 @@ func DecodeMove(data []byte) (move* mines.Move, err error){
     move.Type = mines.MoveType(payload[0])
     move.X = bytesToInt(payload[1:5])
     move.Y = bytesToInt(payload[5:9])
+	move.PlayerId = bytesToInt(payload[9:13])
     return move, nil
 }
 
@@ -606,8 +610,88 @@ func DecodeCellUpdates(data []byte) ([]mines.UpdatedCell, error) {
     return cells, nil
 }
 
+func EncodeGamemodeInfo(info mines.GamemodeUpdateInfo) ([]byte, error) {
+	switch info.GetGameModeId(){
+	case mines.ModeCoop:
+		i, ok := info.(*mines.CoopInfoUpdate)
+		if !ok {
+			return nil, fmt.Errorf("Failed to cast to CoopInfoUpdate")
+		}
+		return EncodeCoopInfoUpdate(i)
+	default:
+		return nil, fmt.Errorf("Gamemode info not implemented to decode")
+	}
+}
+
+func DecodeGamemodeInfo(data []byte) (mines.GamemodeUpdateInfo, error){
+    _, err := checkAndDecodeLength(data, GamemodeInfo)
+    if err != nil {
+        return nil, err
+    }
+	gamemodeId := mines.GameModeId(data[HeaderLength])
+	switch gamemodeId {
+	case mines.ModeCoop:
+		return DecodeCoopInfoUpdate(data)
+	default:
+		return nil, fmt.Errorf("Can't decode gamemode info gamemodeId: %d", gamemodeId)
+	}
+
+}
+func DecodeCoopInfoUpdate(data []byte) (*mines.CoopInfoUpdate, error){
+	if data[HeaderLength] != byte(mines.ModeCoop) {
+		return nil, fmt.Errorf("Wrong gamemodeId to decode Coop: %d", data[4])
+	}
+	offset := HeaderLength + 1
+	scoreLength := int(binary.BigEndian.Uint16(data[offset: offset+2]))
+	offset += 2
+	playerScores := make(map[int] int)
+	for range scoreLength {
+		playerId := bytesToInt(data[offset: offset+4])
+		offset += 4
+		score := bytesToInt(data[offset: offset+4])
+		playerScores[playerId] = score
+		offset += 4
+	}
+	var marksChange []mines.PlayerMarkChange
+	for offset < len(data){
+		X := bytesToInt(data[offset: offset+4])
+		offset += 4
+		Y := bytesToInt(data[offset: offset+4])
+		offset += 4
+		playerId := bytesToInt(data[offset: offset+4])
+		offset += 4
+		marksChange = append(marksChange, mines.PlayerMarkChange{X:X, Y:Y, PlayerId: playerId})
+	}
+		
+
+	return &mines.CoopInfoUpdate{MarksChange: marksChange, PlayerScores: playerScores}, nil
+
+}
+
+func EncodeCoopInfoUpdate(info *mines.CoopInfoUpdate) ([]byte, error){
+    var buf bytes.Buffer
+    buf.WriteByte(byte(GamemodeInfo))
+    buf.WriteByte(byte(0x00))
+	// |gamemodeId + len(playesScores) + size(marksChange) + size(playersCores)|
+	payloadLength := 1+2+12*len(info.MarksChange) + 8*len(info.PlayerScores)
+    err := writeLength(&buf, payloadLength)
+
+    buf.WriteByte(byte(mines.ModeCoop))
+	binary.Write(&buf, binary.BigEndian, uint16(len(info.PlayerScores)))
+	for playerId, score := range info.PlayerScores {
+		binary.Write(&buf, binary.BigEndian, uint32(playerId))
+		binary.Write(&buf, binary.BigEndian, uint32(score))
+	}
+	for _, cellInfo := range info.MarksChange {
+		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.X))
+		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.Y))
+		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.PlayerId))
+	}
+	return buf.Bytes(), err
+}
+
 func EncodeGameStart(params mines.GameParams) ([]byte, error) {
-    payloadLength := 3*4
+    payloadLength := 3*4 + 1
     var buf bytes.Buffer
     buf.WriteByte(byte(StartGame))
     buf.WriteByte(byte(0x00))
@@ -619,6 +703,7 @@ func EncodeGameStart(params mines.GameParams) ([]byte, error) {
     copy(payload[0:4], intToBytes(params.Width))
     copy(payload[4:8], intToBytes(params.Height))
     copy(payload[8:12], intToBytes(params.Mines))
+    payload[12] = byte(params.GameMode)
     buf.Write(payload)
     return buf.Bytes(), nil
     
@@ -629,13 +714,15 @@ func DecodeGameStart(data []byte) (*mines.GameParams, error){
     if err != nil {
         return nil, err
     }
-    if payloadLength != 3*4 {
+    if payloadLength != 3*4 + 1{
         return nil, fmt.Errorf("decode game starte payload incorrect length (%d)", payloadLength)
     }
     payload := data[HeaderLength:]
     params := &mines.GameParams{Width: bytesToInt(payload[0:4]),
                                 Height: bytesToInt(payload[4:8]),
-                                Mines: bytesToInt(payload[8:12])}
+                                Mines: bytesToInt(payload[8:12]),
+								GameMode: mines.GameModeId(payload[12]),
+							}
     return params, nil
 }
 

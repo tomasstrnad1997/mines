@@ -10,6 +10,7 @@ type GameModeId byte
 
 const (
 	ModeClassic GameModeId = iota
+	ModeCoop
 )
 
 type Cell struct
@@ -20,6 +21,10 @@ type Cell struct
     X int 
     Y int
 
+}
+
+type GamemodeUpdateInfo interface{
+	GetGameModeId() GameModeId
 }
 
 type Board struct {
@@ -41,6 +46,7 @@ type Move struct {
     X int
     Y int
     Type MoveType
+	PlayerId int
 }
 
 type GameParams struct {
@@ -54,7 +60,7 @@ type GameMode interface {
 	Init(*Board)
 	Name() string
 	GameModeId() GameModeId
-	OnMove(*Board, Move, *MoveResult) error
+	OnMove(*Board, Move, *MoveResult) (GamemodeUpdateInfo, error) // Returns the changes to the gamemode
 }
 
 type Game struct {
@@ -63,16 +69,17 @@ type Game struct {
 	Mode GameMode
 }
 
-func (game *Game) MakeMove(move Move) (*MoveResult, error){
+func (game *Game) MakeMove(move Move) (*MoveResult, GamemodeUpdateInfo, error){
 	result, err := game.board.makeMove(move)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err = game.Mode.OnMove(game.board, move, result); err != nil {
-		return nil, err
+	deltaState, err := game.Mode.OnMove(game.board, move, result); 
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return result, err
+	return result, deltaState, err
 	
 }
 
@@ -80,6 +87,8 @@ func GetGameModeById(id GameModeId) (GameMode, error){
 	switch id {
 	case ModeClassic:
 		return &Classic{}, nil
+	case ModeCoop:
+		return &Coop{}, nil
 	default:
 		return nil, fmt.Errorf("Unknown gamemode id: %d", id)
 	}
@@ -411,25 +420,3 @@ func (board *Board) GetChangedCellUpdates() ([]UpdatedCell, error) {
     return board.CreateCellUpdates(updatedCells)
 }
 
-func main() {
-    mines := 5
-    board, err := CreateBoard(5, 5, mines);
-    move := Move{1, 2, 0x02}
-    board.makeMove(move)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    for {
-        println("****************")
-        remaining := board.RemainingCells()
-        fmt.Printf("%d-%d\n", remaining, mines)
-        board.Print()
-        if remaining == mines{
-            println("CLEARED")
-            return
-        }
-    }
-    
-    // board.PrintRevaled()
-}
