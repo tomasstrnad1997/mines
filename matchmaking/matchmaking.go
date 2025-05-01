@@ -14,10 +14,7 @@ type command struct {
 }
 
 type Player struct{
-	host string	
-	port uint16
 	controller *protocol.ConnectionController
-	connected bool
 }
 
 type GameLauncher struct {
@@ -138,17 +135,13 @@ func (server *MatchmakingServer) Run(){
     defer server.listener.Close()
     for {
         conn, err := server.listener.Accept()
-		// Add player to player list
         if err != nil {
             println(err)
             return
         }
-		addr := conn.RemoteAddr().(*net.TCPAddr)
-		ip := addr.IP.String()
-		port := uint16(addr.Port)
 		controller := protocol.CreateConnectionController()
 		controller.SetConnection(conn)
-		player := &Player{host:ip, port: port, connected: true, controller: controller}
+		player := &Player{controller: controller}
 		server.RegisterPlayerHandlers(player)
 		go player.controller.ReadServerResponse()
     }
