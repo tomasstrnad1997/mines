@@ -47,7 +47,7 @@ func (launcher *GameLauncher) HandleMessage(data []byte, sender net.Conn) error{
     msgType := protocol.MessageType(data[0])
 	handler, exists := launcher.handlers[msgType]
 	if !exists {
-		return fmt.Errorf("No handler registered for message type: %d", msgType)
+		return fmt.Errorf("No handler registered for message type: %x", msgType)
 	}
 	return handler(data, sender)
 }

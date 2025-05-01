@@ -19,6 +19,15 @@ type ConnectionController struct {
 	messageHandlers map[MessageType]MessageHandler
 	messageChannel chan []byte
 	Connected bool
+	servAddr string
+}
+
+func (controller *ConnectionController) GetServerAddress() string {
+	if !controller.Connected {
+		return ""
+	}
+	addr := controller.server.RemoteAddr().(*net.TCPAddr)
+	return fmt.Sprintf("%s:%d", addr.IP.String(), addr.Port)
 }
 
 func (controller *ConnectionController) StartWriter() {

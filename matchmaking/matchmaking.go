@@ -1,17 +1,12 @@
 package matchmaking
 
 import (
-	"bufio"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 
 	"github.com/tomasstrnad1997/mines/protocol"
 )
-
-type MessageHandler func(data []byte, sender net.Conn) error
 
 type command struct {
     message []byte
@@ -21,18 +16,17 @@ type command struct {
 type Player struct{
 	host string	
 	port uint16
-	client net.Conn
+	controller *protocol.ConnectionController
 	connected bool
 }
 
 type GameLauncher struct {
-	connection net.Conn
+	controller *protocol.ConnectionController
 }
 
 type MatchmakingServer struct{
 	GameLaunchers map[string] *GameLauncher
-    server net.Listener
-    handlers map[protocol.MessageType]MessageHandler
+	listener net.Listener
     messageChannel chan command
 	Players map[string]*Player
 	pendingRequests sync.Map
@@ -48,12 +42,8 @@ func (server *MatchmakingServer) GetNextRequestId() uint32{
 	return requestId
 }
 
-func (server *MatchmakingServer) registerHandler(msgType protocol.MessageType, handler MessageHandler){
-    server.handlers[msgType] = handler
-}
-
-func (server *MatchmakingServer) RegisterHandlers(){
-    server.registerHandler(protocol.SpawnServerRequest, func(bytes []byte, sender net.Conn) error { 
+func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player){
+    player.controller.RegisterHandler(protocol.SpawnServerRequest, func(bytes []byte) error { 
 		launcher, err := server.chooseGameLauncher()
 		if err != nil {
 			return err
@@ -67,33 +57,11 @@ func (server *MatchmakingServer) RegisterHandlers(){
 		if err != nil {
 			return err
 		}
-		server.pendingRequests.Store(requestId, sender)
-		launcher.connection.Write(payload)
+		server.pendingRequests.Store(requestId, player)
+		launcher.controller.SendMessage(payload)
 		return nil
     })
-    server.registerHandler(protocol.ServerSpawned, func(bytes []byte, sender net.Conn) error { 
-		var requestId uint32
-		info, err := protocol.DecodeServerSpawned(bytes, &requestId)
-		if err != nil {
-			return err
-		}
-		value, ok := server.pendingRequests.LoadAndDelete(requestId)
-		if !ok {
-			return fmt.Errorf("Request id is not in pending requests")
-		}
-		// Do checks if the client is still connected
-		requester, ok := value.(net.Conn)
-		if !ok {
-			return fmt.Errorf("Stored request is not net.Conn")
-		}
-		payload, err := protocol.EncodeServerSpawned(info, nil)
-		if err != nil {
-			return err
-		}
-		requester.Write(payload)
-		return nil
-    })
-    server.registerHandler(protocol.GetGameServers, func(bytes []byte, sender net.Conn) error { 
+    player.controller.RegisterHandler(protocol.GetGameServers, func(bytes []byte) error { 
         err := protocol.DecodeGetGameServers(bytes, nil)
 		if err != nil {
 			return err
@@ -105,12 +73,37 @@ func (server *MatchmakingServer) RegisterHandlers(){
 			if err != nil {
 				return err
 			}
-			server.pendingRequests.Store(requestId, sender)
-			launcher.connection.Write(payload)
+			server.pendingRequests.Store(requestId, player)
+			launcher.controller.SendMessage(payload)
 		}
 		return nil
     })
-    server.registerHandler(protocol.SendGameServers, func(bytes []byte, sender net.Conn) error { 
+}
+
+func (server *MatchmakingServer) RegisterLauncherHandlers(launcher *GameLauncher){
+    launcher.controller.RegisterHandler(protocol.ServerSpawned, func(bytes []byte) error { 
+		var requestId uint32
+		info, err := protocol.DecodeServerSpawned(bytes, &requestId)
+		if err != nil {
+			return err
+		}
+		value, ok := server.pendingRequests.LoadAndDelete(requestId)
+		if !ok {
+			return fmt.Errorf("Request id is not in pending requests")
+		}
+		// Do checks if the client is still connected
+		player, ok := value.(*Player)
+		if !ok {
+			return fmt.Errorf("Stored request is not *Player")
+		}
+		payload, err := protocol.EncodeServerSpawned(info, nil)
+		if err != nil {
+			return err
+		}
+		player.controller.SendMessage(payload)
+		return nil
+    })
+    launcher.controller.RegisterHandler(protocol.SendGameServers, func(bytes []byte) error { 
 		var requestId uint32
 		infos, err := protocol.DecodeSendGameServers(bytes, &requestId)
 		if err != nil {
@@ -121,15 +114,15 @@ func (server *MatchmakingServer) RegisterHandlers(){
 			return fmt.Errorf("Request id is not in pending requests")
 		}
 		// Do checks if the client is still connected
-		requester, ok := value.(net.Conn)
+		player, ok := value.(*Player)
 		if !ok {
-			return fmt.Errorf("Stored request is not net.Conn")
+			return fmt.Errorf("Stored request is not *Player")
 		}
 		payload, err := protocol.EncodeSendGameServers(infos, nil)
 		if err != nil {
 			return err
 		}
-		requester.Write(payload)
+		player.controller.SendMessage(payload)
 		return nil
     })
 }
@@ -141,65 +134,11 @@ func (server *MatchmakingServer) chooseGameLauncher() (*GameLauncher, error){
 	return nil, fmt.Errorf("Not game launchers available")
 }
 
-func handlePlayerConnection(player *Player, server *MatchmakingServer){
-    reader := bufio.NewReader(player.client)
-	addr := player.client.RemoteAddr().String()
-	server.Players[addr] = player
-    fmt.Printf("Player connected from %s\n", addr)
-	for {
-        header := make([]byte, protocol.HeaderLength)
-		bytesRead, err := reader.Read(header)
-		if err != nil  || bytesRead != protocol.HeaderLength{
-            fmt.Printf("Player %s disconnected \n", addr)
-            server.Players[addr].connected = false
-			server.Players[addr].client.Close()
-			return
-		}
-        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
-        message := make([]byte, messageLenght+protocol.HeaderLength)
-        copy(message[0:protocol.HeaderLength], header)
-        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
-        if err != nil {
-            fmt.Printf("Error reading message")
-            continue
-        }
-        server.messageChannel <- command{message, player.client}
-	}
-}
-
-func (server *MatchmakingServer) handleLauncherConnection(launcher *GameLauncher) error{
-    reader := bufio.NewReader(launcher.connection)
-    for {
-        header := make([]byte, protocol.HeaderLength)
-		bytesRead, err := reader.Read(header)
-        if err != nil {
-            return fmt.Errorf("Lost connection to server\n")
-        }
-		if bytesRead != protocol.HeaderLength{
-            return fmt.Errorf("Failed to read message\n")
-		}
-        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
-        message := make([]byte, messageLenght+protocol.HeaderLength)
-        copy(message[0:protocol.HeaderLength], header)
-        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
-        if err != nil {
-            return err
-        }
-        err = server.HandleMessage(message, launcher.connection)    
-        if err != nil {
-            println(err.Error())
-        }
-    }
-    
-}
-
-
-
 func (server *MatchmakingServer) Run(){
-    defer server.server.Close()
-	go server.ManageCommands()
+    defer server.listener.Close()
     for {
-        conn, err := server.server.Accept()
+        conn, err := server.listener.Accept()
+		// Add player to player list
         if err != nil {
             println(err)
             return
@@ -207,49 +146,24 @@ func (server *MatchmakingServer) Run(){
 		addr := conn.RemoteAddr().(*net.TCPAddr)
 		ip := addr.IP.String()
 		port := uint16(addr.Port)
-		player := &Player{host:ip, port: port, connected: true, client:conn}
-        go handlePlayerConnection(player, server)
+		controller := protocol.CreateConnectionController()
+		controller.SetConnection(conn)
+		player := &Player{host:ip, port: port, connected: true, controller: controller}
+		server.RegisterPlayerHandlers(player)
+		go player.controller.ReadServerResponse()
     }
 }
 
-func (server *MatchmakingServer) HandleMessage(data []byte, sender net.Conn) error{
-    if data == nil {
-        return fmt.Errorf("Cannot handle empty message")
-    }
-    msgType := protocol.MessageType(data[0])
-	handler, exists := server.handlers[msgType]
-	if !exists {
-		return fmt.Errorf("No handler registered for message type: %d", msgType)
+func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16) error{
+	controller := protocol.CreateConnectionController()
+	if err := controller.Connect(host, port); err != nil {
+		return err
 	}
-	return handler(data, sender)
-}
-
-func (server *MatchmakingServer) ManageCommands(){
-    for command := range server.messageChannel{
-        err := server.HandleMessage(command.message, command.sender)
-        if err != nil {
-            println(err.Error())
-        }
-
-    }
-}
-
-func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16) (*net.TCPConn, error){
-	servAddr := fmt.Sprintf("%s:%d", host, port)
-    tcpAddr, err := net.ResolveTCPAddr("tcp", servAddr)
-    if err != nil {
-        println("Reslove tpc failed:")
-        return nil, err
-    }
-    conn, err := net.DialTCP("tcp", nil, tcpAddr)
-    if err != nil {
-        println("Dial failed:")
-        return nil, err
-    }
-	launcher := &GameLauncher{conn}
-	server.GameLaunchers[servAddr] = launcher
-	go server.handleLauncherConnection(launcher)
-    return conn, nil
+	launcher := &GameLauncher{controller: controller}
+	server.GameLaunchers[controller.GetServerAddress()] = launcher
+	server.RegisterLauncherHandlers(launcher)
+	go launcher.controller.ReadServerResponse()
+	return nil
 }
 
 func CreateMatchMakingServer(port uint16) (*MatchmakingServer, error){
@@ -259,9 +173,7 @@ func CreateMatchMakingServer(port uint16) (*MatchmakingServer, error){
     }
     launchers := make(map[string] *GameLauncher)
     players := make(map[string] *Player)
-    handlers := make(map[protocol.MessageType]MessageHandler)
     ch := make(chan command)
-	server := &MatchmakingServer{server: listener, messageChannel: ch, handlers: handlers, GameLaunchers: launchers, Players: players}
-	server.RegisterHandlers()
+	server := &MatchmakingServer{listener: listener, messageChannel: ch, GameLaunchers: launchers, Players: players}
 	return server, nil
 }
