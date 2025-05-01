@@ -1,13 +1,9 @@
 package client
 
 import (
-	"bufio"
-	"encoding/binary"
 	"fmt"
 	"image"
 	"image/color"
-	"io"
-	"net"
 	"os"
 	"strconv"
 	"sync"
@@ -34,118 +30,6 @@ type BoardView struct {
 }
 
 
-type MessageHandler func([]byte) error
-
-type Handler interface {
-	HandleMessage(bytes []byte) error
-}
-
-type ConnectionController struct {
-	server net.Conn
-	messageHandlers map[protocol.MessageType]MessageHandler
-	messageChannel chan []byte
-	connected bool
-}
-
-func (controller *ConnectionController) StartWriter() {
-	go func() {
-		for {
-			select {
-			case message := <-controller.messageChannel:
-				_, err := controller.server.Write(message)
-				if err != nil {
-					fmt.Println("Error writing to server:", err)
-					return
-				}
-			}
-		}
-	}()
-}
-
-func (controller *ConnectionController) SendMessage(message []byte) error{
-	select {
-		case controller.messageChannel <- message:
-		default:
-			return fmt.Errorf("Failed to write to message channel")
-	}
-	return nil
-}
-
-func createConnectionController() *ConnectionController{
-	messageHandlers := make(map[protocol.MessageType]MessageHandler)
-	channel := make(chan []byte, 64)
-	controller := &ConnectionController{messageHandlers: messageHandlers, connected: false, messageChannel: channel}
-	return controller
-}
-
-func (controller *ConnectionController) HandleMessage(bytes []byte) error {
-    msgType := protocol.MessageType(bytes[0])
-	handlerFunc, exists := controller.messageHandlers[msgType]
-	if !exists {
-		return fmt.Errorf("No handler registered for message type: %d", msgType)
-	}
-	return handlerFunc(bytes)
-}
-
-func (controller *ConnectionController) Connect(host string, port uint16) error{
-	if controller.connected {
-		return fmt.Errorf("Connector already connected")
-	}
-	server, err := connectUsingTcp(host, port)
-	if err != nil {
-		return err
-	}
-	controller.connected = true
-	controller.server = server
-	controller.StartWriter()
-	return nil
-}
-
-func (controller *ConnectionController) RegisterHandler(msgType protocol.MessageType, handlerFunc MessageHandler) {
-	controller.messageHandlers[msgType] = handlerFunc
-}
-
-func connectUsingTcp(host string, port uint16) (*net.TCPConn, error){
-	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port))
-    if err != nil {
-        println("Reslove tpc failed:")
-        return nil, err
-    }
-    conn, err := net.DialTCP("tcp", nil, tcpAddr)
-    // println("RESOLVED TCP")
-    if err != nil {
-        println("Dial failed:")
-        return nil, err
-    }
-    // println("DIALED TCP")
-    return conn, nil
-}
-
-func (controller *ConnectionController) ReadServerResponse() error{
-    reader := bufio.NewReader(controller.server)
-    for {
-        header := make([]byte, protocol.HeaderLength)
-		bytesRead, err := reader.Read(header)
-        if err != nil {
-            return fmt.Errorf("Lost connection to server\n")
-        }
-		if bytesRead != protocol.HeaderLength{
-            return fmt.Errorf("Failed to read message\n")
-		}
-        messageLenght := int(binary.BigEndian.Uint32(header[2:protocol.HeaderLength]))
-        message := make([]byte, messageLenght+protocol.HeaderLength)
-        copy(message[0:protocol.HeaderLength], header)
-        _, err = io.ReadFull(reader, message[protocol.HeaderLength:])
-        if err != nil {
-            return err
-        }
-        err = controller.HandleMessage(message)    
-        if err != nil {
-            println(err.Error())
-        }
-    }
-    
-}
 
 type AppState int
 
@@ -194,8 +78,8 @@ type GameManager struct {
     grid [][]Cell
     cellColorGrid [][]int
     params mines.GameParams
-    gameController *ConnectionController
-	matchmakingController *ConnectionController
+    gameController *protocol.ConnectionController
+	matchmakingController *protocol.ConnectionController
 }
 
 const (
@@ -499,7 +383,7 @@ func initializeGrid(manager *GameManager) {
 
 }
 
-func RegisterMMHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *ConnectionController){
+func RegisterMMHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *protocol.ConnectionController){
     controller.RegisterHandler(protocol.SendGameServers, func(bytes []byte) error { 
 		infos, err := protocol.DecodeSendGameServers(bytes, nil)
 		if err != nil {
@@ -522,7 +406,7 @@ func RegisterMMHandlers(w *app.Window, manager *GameManager, menu *Menu, control
     })
 }
 
-func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *ConnectionController){
+func RegisterGUIHandlers(w *app.Window, manager *GameManager, menu *Menu, controller *protocol.ConnectionController){
     controller.RegisterHandler(protocol.GameEnd, func(bytes []byte) error { 
         endType, err := protocol.DecodeGameEnd(bytes)
         if err != nil {
@@ -664,8 +548,8 @@ func handleMenuButtons(gtx layout.Context, w *app.Window, menu *Menu, manager *G
 func mainLoop(w *app.Window, th *material.Theme, menu *Menu) error {
         var ops op.Ops
         manager := &GameManager{
-			gameController: createConnectionController(),
-			matchmakingController: createConnectionController(),
+			gameController: protocol.CreateConnectionController(),
+			matchmakingController: protocol.CreateConnectionController(),
 		}
 		RegisterMMHandlers(w, manager, menu, manager.matchmakingController)
         RegisterGUIHandlers(w, manager, menu, manager.gameController)
