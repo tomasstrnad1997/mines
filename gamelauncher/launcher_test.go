@@ -18,7 +18,6 @@ func TestGameLaunchViaTCP(t *testing.T){
 	if err != nil {
 		t.Logf("Launcher did not start: %v", err)
 	}
-	go launcher.ManageCommands()
 	go launcher.Loop()
 
 	// time.Sleep(300 * time.Millisecond)
@@ -45,7 +44,7 @@ func TestGameLaunchViaTCP(t *testing.T){
 	for i := range(nServers) {
 		name :=	fmt.Sprintf("Server %d", i)
 		found := false
-		for _, server := range launcher.Game_servers{
+		for _, server := range launcher.GameServers{
 			if server.Name == name {
 				found = true
 				continue
