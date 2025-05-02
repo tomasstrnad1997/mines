@@ -149,14 +149,10 @@ func (server *MatchmakingServer) Run(){
 
 func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16, reconnect bool) error{
 	controller := protocol.CreateConnectionController()
-	if err := controller.Connect(host, port); err != nil {
-		if reconnect {
-			if !controller.TryReconnect(){
-				return fmt.Errorf("Couldnt connecto to launcher")
-			}
-		}
-	}
 	controller.AttemptReconnect = reconnect
+	if err := controller.Connect(host, port); err != nil {
+		return err
+	}
 	launcher := &GameLauncher{controller: controller}
 	server.GameLaunchers[controller.GetServerAddress()] = launcher
 	server.RegisterLauncherHandlers(launcher)

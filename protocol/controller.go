@@ -45,6 +45,7 @@ func (controller *ConnectionController) StartWriter() {
 				if !controller.Connected {
 					fmt.Println("Attempted to write to not connected server")
 				}
+				// fmt.Printf("Sent: 0x%X %d\n", message[0], len(message))
 				_, err := controller.server.Write(message)
 				if err != nil {
 					fmt.Println("Error writing to server:", err)
@@ -54,25 +55,6 @@ func (controller *ConnectionController) StartWriter() {
 		}
 	}()
 }
-
-
-func (controller *ConnectionController) TryReconnect() bool {
-	attempts := 0
-	for attempts < maxReconnectAttempts {
-		fmt.Printf("Attempting to reconnect... (%d/%d)\n", attempts+1, maxReconnectAttempts)
-		time.Sleep(time.Second * time.Duration(2)) // exponential backoff
-		err := controller.Connect(controller.host, controller.port)
-		if err == nil {
-			go controller.ReadServerResponse()
-			fmt.Println("Reconnected successfully.")
-			return true
-		}
-		attempts++
-	}
-	fmt.Println("Failed to reconnect after max attempts.")
-	return false
-}
-
 
 func (controller *ConnectionController) SendMessage(message []byte) error{
 	select {
@@ -109,19 +91,37 @@ func (controller *ConnectionController) HandleMessage(bytes []byte) error {
 	return handlerFunc(bytes)
 }
 
-func (controller *ConnectionController) Connect(host string, port uint16) error{
+func (controller *ConnectionController) connectLoop() error{
+	attempts := 0
+	for attempts < maxReconnectAttempts {
+		err := controller.connect()
+		if err == nil {
+			fmt.Println("Connected successfully.")
+			return nil
+		}
+		time.Sleep(time.Second * time.Duration(2))
+		attempts++
+	}
+	return fmt.Errorf("Failed to connect after max attempts")
+}
+
+func (controller *ConnectionController) connect() error{
 	if controller.Connected {
 		return fmt.Errorf("Connector already connected")
 	}
-	controller.host = host
-	controller.port = port
-	server, err := connectUsingTcp(host, port)
+	server, err := connectUsingTcp(controller.host, controller.port)
 	if err != nil {
 		return err
 	}
 	controller.Connected = true
 	controller.server = server
 	return nil
+}
+
+func (controller *ConnectionController) Connect(host string, port uint16) error{
+	controller.host = host
+	controller.port = port
+	return controller.connectLoop()
 }
 
 func (controller *ConnectionController) RegisterHandler(msgType MessageType, handlerFunc MessageHandler) {
@@ -131,34 +131,25 @@ func (controller *ConnectionController) RegisterHandler(msgType MessageType, han
 func connectUsingTcp(host string, port uint16) (*net.TCPConn, error){
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
-		println("Reslove tpc failed:")
 		return nil, err
 	}
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	// println("RESOLVED TCP")
 	if err != nil {
-		println("Dial failed:")
 		return nil, err
 	}
-	// println("DIALED TCP")
 	return conn, nil
 }
 
-func (controller *ConnectionController) ReadServerResponse() error{
+func (controller *ConnectionController) readLoop() error {
 	reader := bufio.NewReader(controller.server)
 	for {
 		header := make([]byte, HeaderLength)
 		bytesRead, err := reader.Read(header)
 		if err != nil {
-			controller.Connected = false
-			if controller.AttemptReconnect{
-				if !controller.TryReconnect() {
-					return fmt.Errorf("Lost connection to server\n")
-				}
-			}
+			return err
 		}
 		if bytesRead != HeaderLength{
-			return fmt.Errorf("Failed to read message\n")
+			return fmt.Errorf("Invalid message length read\n")
 		}
 		messageLenght := int(binary.BigEndian.Uint32(header[2:HeaderLength]))
 		message := make([]byte, messageLenght+HeaderLength)
@@ -167,10 +158,28 @@ func (controller *ConnectionController) ReadServerResponse() error{
 		if err != nil {
 			return err
 		}
-		err = controller.HandleMessage(message)    
-		if err != nil {
-			println(err.Error())
+		// fmt.Printf("Recieved: 0x%X %d\n", message[0], len(message))
+		if err = controller.HandleMessage(message); err != nil {
+			return err
 		}
+	}
+}
+
+func (controller *ConnectionController) ReadServerResponse() error{
+	for {
+		err := controller.readLoop()
+		if err != nil {
+			fmt.Println("Connection lost:", err)
+			controller.Connected = false
+			controller.server.Close()
+			if controller.AttemptReconnect {
+				fmt.Println("Attempting to reconnect...")
+				controller.connectLoop()
+			}else{
+				return err
+			}
+		}
+
 	}
 	
 }

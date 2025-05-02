@@ -55,7 +55,7 @@ func (server *Server) StartGame(params mines.GameParams) error{
         return err
     }
     server.game = game
-    server.broadcastTextMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
+    //server.broadcastTextMessage(fmt.Sprintf("Starting a new game...\nNumber of mines %d", params.Mines))
 
     println("Starting a new game")
     startMsg, err := protocol.EncodeGameStart(params)
@@ -132,12 +132,12 @@ func RegisterHandlers(player *Player, server *Server){
             }
             server.broadcast(msg)
         }
-        server.broadcastTextMessage(fmt.Sprintf("Player %d requested new game", player.id))
+        //server.broadcastTextMessage(fmt.Sprintf("Player %d requested new game", player.id))
         return server.StartGame(*params)
     })
     player.controller.RegisterHandler(protocol.MoveCommand, func(bytes []byte) error { 
         if !server.gameRunning  {
-            sendTextMessage("Game not running. Cant make moves.", player)
+            //sendTextMessage("Game not running. Cant make moves.", player)
             return nil
         }
         move, err := protocol.DecodeMove(bytes)
