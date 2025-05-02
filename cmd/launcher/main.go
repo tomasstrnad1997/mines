@@ -11,7 +11,6 @@ func main() {
 		println("Failed to launch game launcher")
 	}
 	println("GameLauncher running...")
-	go launcher.ManageCommands()
 	for i := range 5 {
 		launcher.SpawnNewGameServer(fmt.Sprintf("Server %d", i))
 	}

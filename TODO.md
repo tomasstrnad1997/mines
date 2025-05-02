@@ -37,3 +37,6 @@
 * Protocol
     * Consider writing length at the end by owerwriting byte 3 and 4 in header
 * Move connection controller to ?protocol? so it can be used everywhere and connections are handled the same everywhere
+* Connection controller
+    * Handle connecting/disconnecting in a better way
+        * Connect with retries/Connect infinitely

@@ -554,6 +554,7 @@ func mainLoop(w *app.Window, th *material.Theme, menu *Menu) error {
 		RegisterMMHandlers(w, manager, menu, manager.matchmakingController)
         RegisterGUIHandlers(w, manager, menu, manager.gameController)
 
+		manager.matchmakingController.AttemptReconnect = true
 		manager.matchmakingController.Connect("localhost", 42071)
 		go manager.matchmakingController.ReadServerResponse()
 		

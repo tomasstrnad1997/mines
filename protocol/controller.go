@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
+)
+
+const (
+	maxReconnectAttempts = 100
 )
 
 type MessageHandler func([]byte) error
@@ -19,7 +24,9 @@ type ConnectionController struct {
 	messageHandlers map[MessageType]MessageHandler
 	messageChannel chan []byte
 	Connected bool
-	servAddr string
+	host string
+	port uint16
+	AttemptReconnect bool
 }
 
 func (controller *ConnectionController) GetServerAddress() string {
@@ -35,6 +42,9 @@ func (controller *ConnectionController) StartWriter() {
 		for {
 			select {
 			case message := <-controller.messageChannel:
+				if !controller.Connected {
+					fmt.Println("Attempted to write to not connected server")
+				}
 				_, err := controller.server.Write(message)
 				if err != nil {
 					fmt.Println("Error writing to server:", err)
@@ -44,6 +54,25 @@ func (controller *ConnectionController) StartWriter() {
 		}
 	}()
 }
+
+
+func (controller *ConnectionController) TryReconnect() bool {
+	attempts := 0
+	for attempts < maxReconnectAttempts {
+		fmt.Printf("Attempting to reconnect... (%d/%d)\n", attempts+1, maxReconnectAttempts)
+		time.Sleep(time.Second * time.Duration(2)) // exponential backoff
+		err := controller.Connect(controller.host, controller.port)
+		if err == nil {
+			go controller.ReadServerResponse()
+			fmt.Println("Reconnected successfully.")
+			return true
+		}
+		attempts++
+	}
+	fmt.Println("Failed to reconnect after max attempts.")
+	return false
+}
+
 
 func (controller *ConnectionController) SendMessage(message []byte) error{
 	select {
@@ -60,7 +89,6 @@ func (controller *ConnectionController) SetConnection(conn net.Conn) error {
 	}
 	controller.server = conn
 	controller.Connected = true
-	controller.StartWriter()
 	return nil
 }
 
@@ -68,6 +96,7 @@ func CreateConnectionController() *ConnectionController{
 	messageHandlers := make(map[MessageType]MessageHandler)
 	channel := make(chan []byte, 64)
 	controller := &ConnectionController{messageHandlers: messageHandlers, Connected: false, messageChannel: channel}
+	controller.StartWriter()
 	return controller
 }
 
@@ -84,13 +113,14 @@ func (controller *ConnectionController) Connect(host string, port uint16) error{
 	if controller.Connected {
 		return fmt.Errorf("Connector already connected")
 	}
+	controller.host = host
+	controller.port = port
 	server, err := connectUsingTcp(host, port)
 	if err != nil {
 		return err
 	}
 	controller.Connected = true
 	controller.server = server
-	controller.StartWriter()
 	return nil
 }
 
@@ -120,7 +150,12 @@ func (controller *ConnectionController) ReadServerResponse() error{
 		header := make([]byte, HeaderLength)
 		bytesRead, err := reader.Read(header)
 		if err != nil {
-			return fmt.Errorf("Lost connection to server\n")
+			controller.Connected = false
+			if controller.AttemptReconnect{
+				if !controller.TryReconnect() {
+					return fmt.Errorf("Lost connection to server\n")
+				}
+			}
 		}
 		if bytesRead != HeaderLength{
 			return fmt.Errorf("Failed to read message\n")

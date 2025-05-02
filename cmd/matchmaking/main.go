@@ -12,7 +12,7 @@ func main(){
 		println("Failed to create matchmaking server")
 	}
 	go server.Run()
-	_, err = server.ConnectToLauncher("localhost", 42070)
+	err = server.ConnectToLauncher("localhost", 42070, true)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
