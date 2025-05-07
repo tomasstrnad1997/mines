@@ -9,7 +9,6 @@ import (
 type Service struct {
 	Store PlayerStore
 }
-
 var ErrInvalidCredentials = errors.New("invalid username or password")
 func (s *Service) Register(username, password string) error {
 	passwordHash, err := hashPassword(password)
