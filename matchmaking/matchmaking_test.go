@@ -28,7 +28,7 @@ func setupMMserverAndLauncher(mmPort, launcherPort uint16) (*matchmaking.Matchma
 		return nil, nil, err
 	}
 	go launcher.Loop()
-	mmServer.ConnectToLauncher("localhost", launcherPort)
+	mmServer.ConnectToLauncher("localhost", launcherPort, true)
 	return mmServer, launcher, nil
 }
 
