@@ -1,5 +1,5 @@
 
 -- name: CreateMatch :one
 INSERT INTO matches (created_at)
-VALUES (NOW())
+VALUES (date('now'))
 RETURNING id, created_at;

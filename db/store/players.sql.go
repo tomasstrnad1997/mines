@@ -11,7 +11,7 @@ import (
 
 const createPlayer = `-- name: CreatePlayer :one
 INSERT INTO players (username, password_hash, created_at)
-VALUES (?, ?, NOW())
+VALUES (?, ?, date('now'))
 RETURNING id, username, password_hash, created_at
 `
 
