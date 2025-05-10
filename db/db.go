@@ -26,6 +26,10 @@ func CreateTables(db *sql.DB) error {
 	return err
 }
 
+func (store *SQLStore) CreateTables() error {
+	return CreateTables(store.DB)
+}
+
 func InitStore() (*SQLStore, error) {
 	path := os.Getenv("DB_PATH")
 	if path == "" {
@@ -33,6 +37,10 @@ func InitStore() (*SQLStore, error) {
 	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
+		return nil, err
+	}
+	// Need to ping the database to check if the file could be opened
+	if err = db.Ping(); err != nil {
 		return nil, err
 	}
 	ctx := context.Background()

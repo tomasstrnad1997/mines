@@ -1,6 +1,6 @@
 github.com/tomasstrnad1997/mines/db v0.0.0-20250506075410-0f14d509305a h1:0LXo4DxAsdN4EiilCzUlMHwtf0fqer7gIzzZCVq2d8U=
 github.com/tomasstrnad1997/mines/db v0.0.0-20250506075410-0f14d509305a/go.mod h1:OpJNMByoHfG2RUXIcMztLUHdUGKrBzYV/jTTqc6OIvw=
-github.com/tomasstrnad1997/mines/players v0.0.0-20250506075410-0f14d509305a h1:AaS5lX5h9l4e+pRZp8FUhqLvPvkIkgmZqzbHb9k8ngE=
-github.com/tomasstrnad1997/mines/players v0.0.0-20250506075410-0f14d509305a/go.mod h1:5+09elR/huWiNVKLMul0+qMx77SQVDdJaHSqEUBXcB4=
+github.com/tomasstrnad1997/mines/players v0.0.0-20250509235704-635860364dd8 h1:PasfJsVYGAq1RMCVj6c6xEZwq5MroWEX8RZ/1JNxQpc=
+github.com/tomasstrnad1997/mines/players v0.0.0-20250509235704-635860364dd8/go.mod h1:5+09elR/huWiNVKLMul0+qMx77SQVDdJaHSqEUBXcB4=
 golang.org/x/crypto v0.38.0 h1:jt+WWG8IZlBnVbomuhg2Mdq0+BBQaHbtqHEFEigjUV8=
 golang.org/x/crypto v0.38.0/go.mod h1:MvrbAqul58NNYPKnOra203SB9vpuZW0e+RRZV+Ggqjw=
