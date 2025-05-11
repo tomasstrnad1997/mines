@@ -17,3 +17,9 @@ CREATE TABLE gamemodes (
     name TEXT NOT NULL UNIQUE,
     description TEXT
 );
+
+CREATE TABLE match_players (
+    match_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    PRIMARY KEY (match_id, player_id)
+);

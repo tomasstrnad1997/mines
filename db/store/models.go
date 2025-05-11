@@ -21,6 +21,11 @@ type Match struct {
 	CreatedAt  time.Time
 }
 
+type MatchPlayer struct {
+	MatchID  int64
+	PlayerID int64
+}
+
 type Player struct {
 	ID           int64
 	Username     string
