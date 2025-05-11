@@ -21,12 +21,16 @@ func (s *Service) Register(username, password string) error {
 func (s *Service) Login(username, password string) (*Player, error){
 	player, err := s.Store.FindPlayerByName(username)
 	if err != nil {
-		return nil, err
+		return nil, ErrInvalidCredentials
 	}
 	if !checkPasswordHash(password, player.PasswordHash) {
 		return nil, ErrInvalidCredentials
 	}
 	return player, nil
+}
+
+func (s *Service) FindPlayerByName(name string) (*Player, error){
+	return s.Store.FindPlayerByName(name)
 }
 
 func hashPassword(password string) (string, error) {

@@ -4,6 +4,7 @@ go 1.24.3
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.28
+	github.com/tomasstrnad1997/mines/mines v0.0.0-20250509235704-635860364dd8
 	github.com/tomasstrnad1997/mines/players v0.0.0-20250507213621-75d0ed509d03
 )
 

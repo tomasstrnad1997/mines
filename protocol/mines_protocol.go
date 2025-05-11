@@ -25,6 +25,13 @@ const (
 	SendGameServers    = 0xA1
 	GetGameServers     = 0xA2
 	ServerSpawned      = 0xA3
+
+	RegisterPlayerRequest  = 0xC0
+	RegisterPlayerResponse = 0xC1
+	AuthRequest            = 0xC2
+	AuthResponse           = 0xC3
+	GameAuthMMToken        = 0xC4
+	GameAuthReconnectToken = 0xC5
 )
 
 // Custom flags of special second byte
@@ -51,6 +58,11 @@ type GameServerInfo struct {
 	Host        string //IP for clients to connect to
 	Port        uint16
 	PlayerCount int
+}
+
+type AuthPlayerParams struct {
+	Name     string
+	Password string
 }
 
 func checkAndDecodeLength(data []byte, message MessageType) (int, error) {
@@ -97,6 +109,48 @@ func writeLength(buf *bytes.Buffer, length int) error {
 		return fmt.Errorf("Failed to write length (%d)", length)
 	}
 	return nil
+}
+
+func EncodeRegisterPlayerRequest(args AuthPlayerParams) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(RegisterPlayerRequest))
+	buf.WriteByte(byte(0x00))
+	payload, err := encodePlayerParams(args)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeLength(&buf, len(payload)); err != nil {
+		return nil, err
+	}
+	if _, err := buf.Write(payload); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func encodePlayerParams(args AuthPlayerParams) ([]byte, error){
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.BigEndian, int32(len(args.Name))); err != nil {
+		return nil, err
+	}
+	if _, err := buf.WriteString(args.Name + args.Password); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DecodeRegisterPlayerRequest(data []byte) (*AuthPlayerParams, error) {
+	_, err := checkAndDecodeLength(data, RegisterPlayerRequest)
+	if err != nil {
+		return nil, err
+	}
+	payload := data[HeaderLength:]
+	nameLen:= bytesToInt(payload[0:4])
+	passwordOffset := nameLen + 4
+	name := string(payload[4:passwordOffset])
+	password := string(payload[passwordOffset:])
+	params := &AuthPlayerParams{Name: name, Password: password}
+	return params, nil
 }
 
 func EncodeGameEnd(endType GameEndType) ([]byte, error) {

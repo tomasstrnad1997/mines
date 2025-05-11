@@ -55,6 +55,8 @@ func InitStore() (*SQLStore, error) {
 	return store, nil
 }
 
+
+
 func (s *SQLStore) CreatePlayer(name, hash string) error {
 	params := store.CreatePlayerParams{Username: name, PasswordHash: hash}
 	_, err := s.Q.CreatePlayer(s.ctx, params)

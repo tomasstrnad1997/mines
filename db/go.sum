@@ -1,5 +1,7 @@
 github.com/mattn/go-sqlite3 v1.14.28 h1:ThEiQrnbtumT+QMknw63Befp/ce/nUPgBPMlRFEum7A=
 github.com/mattn/go-sqlite3 v1.14.28/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
+github.com/tomasstrnad1997/mines/mines v0.0.0-20250509235704-635860364dd8 h1:ljrPCxAjC6huewsfOKm0KjONS4B4Xh0gDC8702+B9vc=
+github.com/tomasstrnad1997/mines/mines v0.0.0-20250509235704-635860364dd8/go.mod h1:CSCptcHR4SzW53/rFhAm1Q7vjbciYeHNJlhiaBATv7c=
 github.com/tomasstrnad1997/mines/players v0.0.0-20250507213621-75d0ed509d03 h1:oS4B08l3CDrsRkB0whJcE7KEngGSfn+VtMdTSDOJqTw=
 github.com/tomasstrnad1997/mines/players v0.0.0-20250507213621-75d0ed509d03/go.mod h1:5+09elR/huWiNVKLMul0+qMx77SQVDdJaHSqEUBXcB4=
 golang.org/x/crypto v0.38.0 h1:jt+WWG8IZlBnVbomuhg2Mdq0+BBQaHbtqHEFEigjUV8=

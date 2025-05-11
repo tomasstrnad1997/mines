@@ -5,6 +5,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/tomasstrnad1997/mines/db"
+	"github.com/tomasstrnad1997/mines/players"
 	"github.com/tomasstrnad1997/mines/protocol"
 )
 
@@ -29,6 +31,8 @@ type MatchmakingServer struct{
 	pendingRequests sync.Map
 	currentRequestId uint32
 	requestIdMux sync.Mutex
+	db *db.SQLStore
+	PlayerService *players.Service
 }
 
 func (server *MatchmakingServer) GetNextRequestId() uint32{
@@ -72,6 +76,16 @@ func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player){
 			}
 			server.pendingRequests.Store(requestId, player)
 			launcher.controller.SendMessage(payload)
+		}
+		return nil
+    })
+    player.controller.RegisterHandler(protocol.RegisterPlayerRequest, func(bytes []byte) error { 
+		playerData, err := protocol.DecodeRegisterPlayerRequest(bytes)
+		if err != nil {
+			return err
+		}
+		if err := server.PlayerService.Register(playerData.Name, playerData.Password);err != nil {
+			return err
 		}
 		return nil
     })
@@ -166,8 +180,14 @@ func CreateMatchMakingServer(port uint16) (*MatchmakingServer, error){
         return nil, err
     }
     launchers := make(map[string] *GameLauncher)
-    players := make(map[string] *Player)
+    plrs := make(map[string] *Player)
+	store, err := db.InitStore()
+	if err != nil {
+		return nil, err
+	}
+	pService := &players.Service{Store: store}
+	
     ch := make(chan command)
-	server := &MatchmakingServer{listener: listener, messageChannel: ch, GameLaunchers: launchers, Players: players}
+	server := &MatchmakingServer{listener: listener, messageChannel: ch, GameLaunchers: launchers, Players: plrs, db: store, PlayerService: pService}
 	return server, nil
 }
