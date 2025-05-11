@@ -12,7 +12,7 @@ func main(){
 	if err != nil {
 		log.Fatalf("Failed to create store: %v", err)
 	}
-	if err = store.CreateTables(); err != nil {
+	if err = store.InitializeTables(); err != nil {
 		println(err.Error())
 		log.Fatalf("Failed to create tables: %v", err)
 	}
