@@ -7,17 +7,23 @@ package store
 
 import (
 	"context"
+	"time"
 )
 
 const createMatch = `-- name: CreateMatch :one
-INSERT INTO matches (created_at)
-VALUES (date('now'))
+INSERT INTO matches (gamemode_id, created_at)
+VALUES (?, date('now'))
 RETURNING id, created_at
 `
 
-func (q *Queries) CreateMatch(ctx context.Context) (Match, error) {
-	row := q.db.QueryRowContext(ctx, createMatch)
-	var i Match
+type CreateMatchRow struct {
+	ID        int64
+	CreatedAt time.Time
+}
+
+func (q *Queries) CreateMatch(ctx context.Context, gamemodeID int64) (CreateMatchRow, error) {
+	row := q.db.QueryRowContext(ctx, createMatch, gamemodeID)
+	var i CreateMatchRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }

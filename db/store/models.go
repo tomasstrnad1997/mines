@@ -5,12 +5,20 @@
 package store
 
 import (
+	"database/sql"
 	"time"
 )
 
+type Gamemode struct {
+	ID          int64
+	Name        string
+	Description sql.NullString
+}
+
 type Match struct {
-	ID        int64
-	CreatedAt time.Time
+	ID         int64
+	GamemodeID int64
+	CreatedAt  time.Time
 }
 
 type Player struct {

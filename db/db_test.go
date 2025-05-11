@@ -18,7 +18,7 @@ func createTempDB(t *testing.T) (string, error) {
 	}
 	// Close the temp file
 	tempFile.Close()
-	t.Cleanup(func (){
+	t.Cleanup(func() {
 
 		if err := os.Remove(tempFile.Name()); err != nil {
 			fmt.Printf("failed to delete temp DB file %v\n", err)
@@ -31,7 +31,7 @@ func createTempDB(t *testing.T) (string, error) {
 		t.Fatalf("Failed to open db file: %v", err)
 	}
 
-	if err = db.CreateTables(database); err != nil {
+	if err = db.InitializeTables(database); err != nil {
 		t.Fatalf("Failed to create tables: %v", err)
 	}
 

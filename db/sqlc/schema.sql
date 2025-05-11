@@ -7,5 +7,13 @@ CREATE TABLE players (
 
 CREATE TABLE matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gamemode_id INTEGER NOT NULL REFERENCES gamemodes(id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE gamemodes (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT
 );

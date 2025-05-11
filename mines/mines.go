@@ -13,6 +13,12 @@ const (
 	ModeCoop               = 1
 )
 
+
+var GameModeNames = map[GameModeId]string{
+	ModeClassic: "Classic",
+	ModeCoop:    "Coop",
+}
+
 type Cell struct {
 	Mine     bool
 	Revealed bool
