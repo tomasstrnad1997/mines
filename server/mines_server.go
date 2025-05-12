@@ -32,6 +32,7 @@ type Server struct {
     clients map[int]bool
     players map[int]*Player
     clientsMux sync.Mutex
+	moveMux sync.Mutex
 }
 
 func (server *Server) GetNumberOfPlayers() int{
@@ -145,7 +146,9 @@ func RegisterHandlers(player *Player, server *Server){
             return err
         }
 		move.PlayerId = player.id
+		server.moveMux.Lock()
         moveResult, gamemodeInfo, err := server.game.MakeMove(*move)
+		server.moveMux.Unlock()
         if err != nil {
             return err
         }
