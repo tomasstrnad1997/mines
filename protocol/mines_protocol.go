@@ -103,7 +103,7 @@ func bytesToInt(bytes []byte) int {
 	return int(binary.BigEndian.Uint32(bytes))
 }
 
-func writeLength(buf *bytes.Buffer, length int) error {
+func writePayloadLength(buf *bytes.Buffer, length int) error {
 	err := binary.Write(buf, binary.BigEndian, uint32(length))
 	if err != nil {
 		return fmt.Errorf("Failed to write length (%d)", length)
@@ -111,21 +111,69 @@ func writeLength(buf *bytes.Buffer, length int) error {
 	return nil
 }
 
-func EncodeRegisterPlayerRequest(args AuthPlayerParams) ([]byte, error) {
+
+func EncodeAuthRequest(params AuthPlayerParams) ([]byte, error) {
+	return encodeAuthPlayerParamsMessage(params, AuthRequest)
+}
+
+func DecodeAuthRequest(data []byte) (*AuthPlayerParams, error) {
+	return decodeAuthPlayerParams(data, AuthRequest)
+}
+
+func encodeAuthPlayerParamsMessage(params AuthPlayerParams, tp MessageType) ([]byte, error){
 	var buf bytes.Buffer
-	buf.WriteByte(byte(RegisterPlayerRequest))
+	buf.WriteByte(byte(tp))
 	buf.WriteByte(byte(0x00))
-	payload, err := encodePlayerParams(args)
+	payload, err := encodePlayerParams(params)
 	if err != nil {
 		return nil, err
 	}
-	if err := writeLength(&buf, len(payload)); err != nil {
+	if err := writePayloadLength(&buf, len(payload)); err != nil {
 		return nil, err
 	}
 	if _, err := buf.Write(payload); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func DecodeAuthResponse(data []byte) (bool, error) {
+	_, err := checkAndDecodeLength(data, AuthResponse)
+	if err != nil {
+		return false, err
+	}
+	panic("Not implemented")
+}
+
+
+func EncodeRegisterPlayerResponse(success bool) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(RegisterPlayerResponse))
+	buf.WriteByte(byte(0x00))
+	if err := writePayloadLength(&buf, 1); err != nil {
+		return nil, err
+	}
+	var b byte = 0
+	if success {
+		b = 1
+	}
+	if err := buf.WriteByte(b); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DecodeRegisterPlayerResponse(data []byte) (bool, error) {
+	_, err := checkAndDecodeLength(data, ServerSpawned)
+	if err != nil {
+		return false, err
+	}
+	success := data[HeaderLength] == 1
+	return success, nil
+}
+
+func EncodeRegisterPlayerRequest(params AuthPlayerParams) ([]byte, error) {
+	return encodeAuthPlayerParamsMessage(params, RegisterPlayerRequest)
 }
 
 func encodePlayerParams(args AuthPlayerParams) ([]byte, error){
@@ -139,8 +187,8 @@ func encodePlayerParams(args AuthPlayerParams) ([]byte, error){
 	return buf.Bytes(), nil
 }
 
-func DecodeRegisterPlayerRequest(data []byte) (*AuthPlayerParams, error) {
-	_, err := checkAndDecodeLength(data, RegisterPlayerRequest)
+func decodeAuthPlayerParams(data []byte, tp MessageType) (*AuthPlayerParams, error) {
+	_, err := checkAndDecodeLength(data, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -153,11 +201,15 @@ func DecodeRegisterPlayerRequest(data []byte) (*AuthPlayerParams, error) {
 	return params, nil
 }
 
+func DecodeRegisterPlayerRequest(data []byte) (*AuthPlayerParams, error) {
+	return decodeAuthPlayerParams(data, RegisterPlayerRequest)
+}
+
 func EncodeGameEnd(endType GameEndType) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte(byte(GameEnd))
 	buf.WriteByte(byte(0x00))
-	err := writeLength(&buf, 1)
+	err := writePayloadLength(&buf, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +232,7 @@ func EncodeServerSpawned(info *GameServerInfo, requestId *uint32) ([]byte, error
 	}
 
 	buf.WriteByte(byte(flag))
-	writeLength(&buf, len(encoded)+offset)
+	writePayloadLength(&buf, len(encoded)+offset)
 	if requestId != nil {
 		if err = binary.Write(&buf, binary.BigEndian, requestId); err != nil {
 			return nil, err
@@ -225,7 +277,7 @@ func EncodeGetGameServers(requestId *uint32) ([]byte, error) {
 		flags |= HasIdFlag
 	}
 	buf.WriteByte(byte(flags))
-	err := writeLength(&buf, payloadLength)
+	err := writePayloadLength(&buf, payloadLength)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +349,7 @@ func EncodeSendGameServers(servers []*GameServerInfo, requestId *uint32) ([]byte
 		payloadLength += len(encoded)
 	}
 
-	writeLength(&buf, payloadLength)
+	writePayloadLength(&buf, payloadLength)
 	if requestId != nil {
 		if err := binary.Write(&buf, binary.BigEndian, *requestId); err != nil {
 			return nil, err
@@ -366,7 +418,7 @@ func DecodeGameServer(buf io.Reader) (*GameServerInfo, error) {
 }
 
 func writeStringWithLength(buf *bytes.Buffer, str string) error {
-	err := writeLength(buf, len(str))
+	err := writePayloadLength(buf, len(str))
 	if err != nil {
 		return err
 	}
@@ -398,7 +450,7 @@ func EncodeSpawnServerRequest(name string, requestId *uint32) ([]byte, error) {
 		flag |= HasIdFlag
 	}
 	buf.WriteByte(byte(flag))
-	err := writeLength(&buf, len(name)+offset)
+	err := writePayloadLength(&buf, len(name)+offset)
 	if requestId != nil {
 		if err := binary.Write(&buf, binary.BigEndian, requestId); err != nil {
 			return nil, err
@@ -441,7 +493,7 @@ func EncodeTextMessage(message string) ([]byte, error) {
 	buf.WriteByte(byte(TextMessage))
 	buf.WriteByte(byte(0x00))
 	payload := []byte(message)
-	err := writeLength(&buf, len(payload))
+	err := writePayloadLength(&buf, len(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +521,7 @@ func EncodeMove(move mines.Move) ([]byte, error) {
 	copy(payload[5:9], intToBytes(move.Y))
 	copy(payload[9:13], intToBytes(move.PlayerId))
 
-	err := writeLength(&buf, len(payload))
+	err := writePayloadLength(&buf, len(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +602,7 @@ func EncodeBoard(board *mines.Board) ([]byte, error) {
 			boardBuf.Write(encodeCell(board.Cells[x][y]))
 		}
 	}
-	err := writeLength(&buf, boardBuf.Len())
+	err := writePayloadLength(&buf, boardBuf.Len())
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +668,7 @@ func EncodeCellUpdates(cells []mines.UpdatedCell) ([]byte, error) {
 	buf.WriteByte(byte(CellUpdate))
 	buf.WriteByte(byte(0x00))
 	payloadLength := len(cells) * UpdateCellByteLength
-	err := writeLength(&buf, payloadLength)
+	err := writePayloadLength(&buf, payloadLength)
 	if err != nil {
 		return nil, err
 	}
@@ -725,7 +777,7 @@ func EncodeCoopInfoUpdate(info *mines.CoopInfoUpdate) ([]byte, error) {
 	buf.WriteByte(byte(0x00))
 	// |gamemodeId + len(playesScores) + size(marksChange) + size(playersCores)|
 	payloadLength := 1 + 2 + 12*len(info.MarksChange) + 8*len(info.PlayerScores)
-	err := writeLength(&buf, payloadLength)
+	err := writePayloadLength(&buf, payloadLength)
 
 	buf.WriteByte(byte(mines.ModeCoop))
 	binary.Write(&buf, binary.BigEndian, uint16(len(info.PlayerScores)))
@@ -746,7 +798,7 @@ func EncodeGameStart(params mines.GameParams) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte(byte(StartGame))
 	buf.WriteByte(byte(0x00))
-	err := writeLength(&buf, payloadLength)
+	err := writePayloadLength(&buf, payloadLength)
 	if err != nil {
 		return nil, err
 	}
