@@ -4,8 +4,6 @@
     * Maybe more gamemodes???
 * Storing game history in DB
 * Logs
-* Players
-    * Names
 * Game
     * Score
     * Time
@@ -24,6 +22,7 @@
         * Add locally hosted games to browser (filter official games and unoficial)
         * If the matchmaking server resets it needs to sync with currently running game
     * Option to connect by game server name + password
+    * Manage the issue of one player trying to login multiple times
 * Game Server Launcher
     * Layer between matchmaking server and game server
     * For official games create a game lancher that spawns game servers

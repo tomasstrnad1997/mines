@@ -22,6 +22,11 @@ type AuthToken struct {
 	Signature [32]byte
 }
 
+type PlayerInfo struct {
+	ID uint32
+	Name string
+}
+
 const AuthTokenLength = 4 + 8 + 16 + 32
 
 var (
@@ -40,7 +45,7 @@ func (s *Service) Register(username, password string) error {
 	return s.Store.CreatePlayer(username, passwordHash)
 }
 
-func (s *Service) Login(username, password string) (*Player, error) {
+func (s *Service) Login(username, password string) (*PlayerInfo, error) {
 	player, err := s.Store.FindPlayerByName(username)
 	if err != nil {
 		return nil, ErrInvalidCredentials
@@ -48,7 +53,7 @@ func (s *Service) Login(username, password string) (*Player, error) {
 	if !checkPasswordHash(password, player.PasswordHash) {
 		return nil, ErrInvalidCredentials
 	}
-	return player, nil
+	return &PlayerInfo{Name: player.Name, ID: player.ID}, nil
 }
 
 func (s *Service) FindPlayerByName(name string) (*Player, error) {

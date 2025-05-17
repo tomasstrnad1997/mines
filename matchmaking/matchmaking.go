@@ -1,6 +1,7 @@
 package matchmaking
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -11,31 +12,33 @@ import (
 )
 
 type command struct {
-    message []byte
-    sender net.Conn
+	message []byte
+	sender  net.Conn
 }
 
-type Player struct{
-	controller *protocol.ConnectionController
+type Player struct {
+	controller    *protocol.ConnectionController
+	authenticated bool
+	info          *players.PlayerInfo
 }
 
 type GameLauncher struct {
 	controller *protocol.ConnectionController
 }
 
-type MatchmakingServer struct{
-	GameLaunchers map[string] *GameLauncher
-	listener net.Listener
-    messageChannel chan command
-	Players map[string]*Player
-	pendingRequests sync.Map
+type MatchmakingServer struct {
+	GameLaunchers    map[string]*GameLauncher
+	listener         net.Listener
+	messageChannel   chan command
+	Players          map[string]*Player
+	pendingRequests  sync.Map
 	currentRequestId uint32
-	requestIdMux sync.Mutex
-	db *db.SQLStore
-	PlayerService *players.Service
+	requestIdMux     sync.Mutex
+	db               *db.SQLStore
+	PlayerService    *players.Service
 }
 
-func (server *MatchmakingServer) GetNextRequestId() uint32{
+func (server *MatchmakingServer) GetNextRequestId() uint32 {
 	server.requestIdMux.Lock()
 	defer server.requestIdMux.Unlock()
 	requestId := server.currentRequestId
@@ -43,8 +46,8 @@ func (server *MatchmakingServer) GetNextRequestId() uint32{
 	return requestId
 }
 
-func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player){
-    player.controller.RegisterHandler(protocol.SpawnServerRequest, func(bytes []byte) error { 
+func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player) {
+	player.controller.RegisterHandler(protocol.SpawnServerRequest, func(bytes []byte) error {
 		launcher, err := server.chooseGameLauncher()
 		if err != nil {
 			return err
@@ -61,9 +64,9 @@ func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player){
 		server.pendingRequests.Store(requestId, player)
 		launcher.controller.SendMessage(payload)
 		return nil
-    })
-    player.controller.RegisterHandler(protocol.GetGameServers, func(bytes []byte) error { 
-        err := protocol.DecodeGetGameServers(bytes, nil)
+	})
+	player.controller.RegisterHandler(protocol.GetGameServers, func(bytes []byte) error {
+		err := protocol.DecodeGetGameServers(bytes, nil)
 		if err != nil {
 			return err
 		}
@@ -78,21 +81,47 @@ func (server *MatchmakingServer) RegisterPlayerHandlers(player *Player){
 			launcher.controller.SendMessage(payload)
 		}
 		return nil
-    })
-    player.controller.RegisterHandler(protocol.RegisterPlayerRequest, func(bytes []byte) error { 
+	})
+	player.controller.RegisterHandler(protocol.RegisterPlayerRequest, func(bytes []byte) error {
 		playerData, err := protocol.DecodeRegisterPlayerRequest(bytes)
 		if err != nil {
 			return err
 		}
-		if err := server.PlayerService.Register(playerData.Name, playerData.Password);err != nil {
+		if err := server.PlayerService.Register(playerData.Name, playerData.Password); err != nil {
 			return err
 		}
 		return nil
-    })
+	})
+	player.controller.RegisterHandler(protocol.AuthRequest, func(bytes []byte) error {
+		playerData, err := protocol.DecodeAuthRequest(bytes)
+		if err != nil {
+			return err
+		}
+		playerInfo, err := server.PlayerService.Login(playerData.Name, playerData.Password)
+		response := protocol.AuthResponse{Success: false, Player: nil}
+		if err != nil {
+			if !errors.Is(err, players.ErrInvalidCredentials) {
+				return err
+			}
+		} else {
+			response.Success = true
+			response.Player = playerInfo
+			player.authenticated = true
+			player.info = playerInfo
+		}
+		encoded, err := protocol.EncodeAuthResponse(response)
+		if err != nil {
+			return err
+		}
+		if err := player.controller.SendMessage(encoded); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
-func (server *MatchmakingServer) RegisterLauncherHandlers(launcher *GameLauncher){
-    launcher.controller.RegisterHandler(protocol.ServerSpawned, func(bytes []byte) error { 
+func (server *MatchmakingServer) RegisterLauncherHandlers(launcher *GameLauncher) {
+	launcher.controller.RegisterHandler(protocol.ServerSpawned, func(bytes []byte) error {
 		var requestId uint32
 		info, err := protocol.DecodeServerSpawned(bytes, &requestId)
 		if err != nil {
@@ -113,8 +142,8 @@ func (server *MatchmakingServer) RegisterLauncherHandlers(launcher *GameLauncher
 		}
 		player.controller.SendMessage(payload)
 		return nil
-    })
-    launcher.controller.RegisterHandler(protocol.SendGameServers, func(bytes []byte) error { 
+	})
+	launcher.controller.RegisterHandler(protocol.SendGameServers, func(bytes []byte) error {
 		var requestId uint32
 		infos, err := protocol.DecodeSendGameServers(bytes, &requestId)
 		if err != nil {
@@ -135,33 +164,33 @@ func (server *MatchmakingServer) RegisterLauncherHandlers(launcher *GameLauncher
 		}
 		player.controller.SendMessage(payload)
 		return nil
-    })
+	})
 }
 
-func (server *MatchmakingServer) chooseGameLauncher() (*GameLauncher, error){
-	for _, value := range server.GameLaunchers{
+func (server *MatchmakingServer) chooseGameLauncher() (*GameLauncher, error) {
+	for _, value := range server.GameLaunchers {
 		return value, nil
 	}
 	return nil, fmt.Errorf("Not game launchers available")
 }
 
-func (server *MatchmakingServer) Run(){
-    defer server.listener.Close()
-    for {
-        conn, err := server.listener.Accept()
-        if err != nil {
-            println(err)
-            return
-        }
+func (server *MatchmakingServer) Run() {
+	defer server.listener.Close()
+	for {
+		conn, err := server.listener.Accept()
+		if err != nil {
+			println(err)
+			return
+		}
 		controller := protocol.CreateConnectionController()
 		controller.SetConnection(conn)
 		player := &Player{controller: controller}
 		server.RegisterPlayerHandlers(player)
 		go player.controller.ReadServerResponse()
-    }
+	}
 }
 
-func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16, reconnect bool) error{
+func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16, reconnect bool) error {
 	controller := protocol.CreateConnectionController()
 	controller.AttemptReconnect = reconnect
 	if err := controller.Connect(host, port); err != nil {
@@ -174,20 +203,20 @@ func (server *MatchmakingServer) ConnectToLauncher(host string, port uint16, rec
 	return nil
 }
 
-func CreateMatchMakingServer(port uint16) (*MatchmakingServer, error){
+func CreateMatchMakingServer(port uint16) (*MatchmakingServer, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-    if err != nil {
-        return nil, err
-    }
-    launchers := make(map[string] *GameLauncher)
-    plrs := make(map[string] *Player)
+	if err != nil {
+		return nil, err
+	}
+	launchers := make(map[string]*GameLauncher)
+	plrs := make(map[string]*Player)
 	store, err := db.InitStore()
 	if err != nil {
 		return nil, err
 	}
 	pService := &players.Service{Store: store}
-	
-    ch := make(chan command)
+
+	ch := make(chan command)
 	server := &MatchmakingServer{listener: listener, messageChannel: ch, GameLaunchers: launchers, Players: plrs, db: store, PlayerService: pService}
 	return server, nil
 }

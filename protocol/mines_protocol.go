@@ -31,7 +31,7 @@ const (
 	RegisterPlayerRequest  = 0xC0
 	RegisterPlayerResponse = 0xC1
 	AuthRequest            = 0xC2
-	AuthResponse           = 0xC3
+	AuthResponseMessage    = 0xC3
 	ConnectToGameRequest   = 0xC4
 	ConnectToGameResponse  = 0xC5
 )
@@ -58,6 +58,11 @@ const (
 var (
 	ErrInvalidPayloadSize = errors.New("invalid payload size")
 )
+
+type AuthResponse struct {
+	Success bool
+	Player  *players.PlayerInfo
+}
 
 type GameServerInfo struct {
 	Name string
@@ -308,12 +313,69 @@ func DecodeConnectToGameRequest(data []byte) (uint32, error) {
 	return binary.BigEndian.Uint32(data[HeaderLength:]), nil
 }
 
-func DecodeAuthResponse(data []byte) (bool, error) {
-	_, err := checkAndDecodeLength(data, AuthResponse)
-	if err != nil {
-		return false, err
+func EncodeAuthResponse(response AuthResponse) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(AuthResponseMessage))
+	buf.WriteByte(byte(0x00))
+	if !response.Success {
+		if err := writePayloadLength(&buf, 1); err != nil {
+			return nil, err
+		}
+		if err := buf.WriteByte(0); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 	}
-	panic("Not implemented")
+	if response.Player == nil {
+		return nil, fmt.Errorf("player cannot be nil when success is true")
+	}
+	// Success + playerID + nameLen + name
+	payloadLength := 1 + 4 + 4 + len(response.Player.Name)
+	if err := writePayloadLength(&buf, payloadLength); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(&buf, binary.BigEndian, response.Player.ID); err != nil {
+		return nil, err
+	}
+	if err := writeStringWithLength(&buf, response.Player.Name); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DecodeAuthResponse(data []byte) (*AuthResponse, error) {
+	pLen, err := checkAndDecodeLength(data, AuthResponseMessage)
+	if err != nil {
+		return nil, err
+	}
+	if pLen == 0 {
+		return nil, ErrInvalidPayloadSize
+	}
+	payload := data[HeaderLength:]
+
+	// Auth failed
+	if payload[0] != 1 {
+		if pLen != 1 {
+			return nil, ErrInvalidPayloadSize
+		}
+		return &AuthResponse{Success: false}, nil
+	}
+
+	// Success + id + nameLen + name (atleast 1 char)
+	if pLen < 1+4+4+1 {
+		return nil, ErrInvalidPayloadSize
+	}
+	id := binary.BigEndian.Uint32(payload[1:5])
+	nameLen := binary.BigEndian.Uint32(payload[5:9])
+	name := string(payload[9 : 9+nameLen])
+	return &AuthResponse{
+		Success: true,
+		Player: &players.PlayerInfo{
+			ID:   id,
+			Name: name,
+		},
+	}, nil
+
 }
 
 func EncodeRegisterPlayerResponse(success bool) ([]byte, error) {
