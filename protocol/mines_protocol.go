@@ -34,6 +34,7 @@ const (
 	AuthResponseMessage    = 0xC3
 	ConnectToGameRequest   = 0xC4
 	ConnectToGameResponse  = 0xC5
+	AuthWithMMToken        = 0xC6
 )
 
 // Custom flags of special second byte
@@ -132,6 +133,27 @@ func writePayloadLength(buf *bytes.Buffer, length int) error {
 		return fmt.Errorf("Failed to write length (%d)", length)
 	}
 	return nil
+}
+
+func EncodeAuthWithMMToken(token players.AuthToken) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(AuthWithMMToken))
+	buf.WriteByte(byte(0x00))
+	if err := writePayloadLength(&buf, players.AuthTokenLength); err != nil {
+		return nil, err
+	}
+	encoded := encodeAuthToken(token)
+	if _, err := buf.Write(encoded); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DecodeAuthWithMMToken(data []byte) (players.AuthToken, error) {
+	if _, err := checkAndDecodeLength(data, AuthWithMMToken); err != nil {
+		return players.AuthToken{}, err
+	}
+	return decodeAuthToken(data[HeaderLength:])
 }
 
 func EncodeAuthRequest(params AuthPlayerParams) ([]byte, error) {
