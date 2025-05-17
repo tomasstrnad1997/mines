@@ -165,6 +165,10 @@ func (controller *ConnectionController) readLoop() error {
 	}
 }
 
+func (controller *ConnectionController) DeleteHandler(msgType MessageType) {
+	delete(controller.messageHandlers, msgType)
+}
+
 func (controller *ConnectionController) ReadServerResponse() error{
 	for {
 		err := controller.readLoop()

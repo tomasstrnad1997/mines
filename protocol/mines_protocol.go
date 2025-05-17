@@ -773,7 +773,7 @@ func EncodeMove(move mines.Move) ([]byte, error) {
 	payload[0] = byte(move.Type)
 	copy(payload[1:5], intToBytes(move.X))
 	copy(payload[5:9], intToBytes(move.Y))
-	copy(payload[9:13], intToBytes(move.PlayerId))
+	binary.BigEndian.PutUint32(payload[9:13], move.PlayerId)
 
 	err := writePayloadLength(&buf, len(payload))
 	if err != nil {
@@ -794,7 +794,7 @@ func DecodeMove(data []byte) (move *mines.Move, err error) {
 	move.Type = mines.MoveType(payload[0])
 	move.X = bytesToInt(payload[1:5])
 	move.Y = bytesToInt(payload[5:9])
-	move.PlayerId = bytesToInt(payload[9:13])
+	move.PlayerId = binary.BigEndian.Uint32(payload[9:13])
 	return move, nil
 }
 
@@ -1002,9 +1002,9 @@ func DecodeCoopInfoUpdate(data []byte) (*mines.CoopInfoUpdate, error) {
 	offset := HeaderLength + 1
 	scoreLength := int(binary.BigEndian.Uint16(data[offset : offset+2]))
 	offset += 2
-	playerScores := make(map[int]int)
+	playerScores := make(map[uint32]int)
 	for range scoreLength {
-		playerId := bytesToInt(data[offset : offset+4])
+		playerId := binary.BigEndian.Uint32(data[offset : offset+4])
 		offset += 4
 		score := bytesToInt(data[offset : offset+4])
 		playerScores[playerId] = score
@@ -1016,7 +1016,7 @@ func DecodeCoopInfoUpdate(data []byte) (*mines.CoopInfoUpdate, error) {
 		offset += 4
 		Y := bytesToInt(data[offset : offset+4])
 		offset += 4
-		playerId := bytesToInt(data[offset : offset+4])
+		playerId := binary.BigEndian.Uint32(data[offset : offset+4])
 		offset += 4
 		marksChange = append(marksChange, mines.PlayerMarkChange{X: X, Y: Y, PlayerId: playerId})
 	}
@@ -1036,13 +1036,13 @@ func EncodeCoopInfoUpdate(info *mines.CoopInfoUpdate) ([]byte, error) {
 	buf.WriteByte(byte(mines.ModeCoop))
 	binary.Write(&buf, binary.BigEndian, uint16(len(info.PlayerScores)))
 	for playerId, score := range info.PlayerScores {
-		binary.Write(&buf, binary.BigEndian, uint32(playerId))
+		binary.Write(&buf, binary.BigEndian, playerId)
 		binary.Write(&buf, binary.BigEndian, uint32(score))
 	}
 	for _, cellInfo := range info.MarksChange {
 		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.X))
 		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.Y))
-		binary.Write(&buf, binary.BigEndian, uint32(cellInfo.PlayerId))
+		binary.Write(&buf, binary.BigEndian, cellInfo.PlayerId)
 	}
 	return buf.Bytes(), err
 }

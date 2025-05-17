@@ -3,19 +3,19 @@ package mines
 
 
 type Coop struct{
-	boardPlayerMarks [][]int
-	playerScores map[int] int
+	boardPlayerMarks [][]uint32
+	playerScores map[uint32] int
 }
 
 type PlayerMarkChange struct {
 	X int
 	Y int
-	PlayerId int
+	PlayerId uint32
 }
 
 type CoopInfoUpdate struct {
 	MarksChange []PlayerMarkChange
-	PlayerScores map[int] int
+	PlayerScores map[uint32] int
 }
 
 func (c *CoopInfoUpdate) GetGameModeId() GameModeId{
@@ -23,12 +23,12 @@ func (c *CoopInfoUpdate) GetGameModeId() GameModeId{
 }
 
 func (c *Coop) Init(board *Board) {
-    grid := make([][]int, board.Width)
+    grid := make([][]uint32, board.Width)
     for i := range grid {
-        grid[i] = make([]int, board.Height)
+        grid[i] = make([]uint32, board.Height)
     }
 	c.boardPlayerMarks = grid
-	c.playerScores = make(map[int]int)
+	c.playerScores = make(map[uint32]int)
 
 }
 

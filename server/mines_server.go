@@ -168,7 +168,7 @@ func RegisterHandlers(player *Player, server *Server) {
 		if err != nil {
 			return err
 		}
-		move.PlayerId = player.localID
+		move.PlayerId = player.info.ID
 		server.moveMux.Lock()
 		moveResult, gamemodeInfo, err := server.game.MakeMove(*move)
 		server.moveMux.Unlock()
@@ -254,6 +254,10 @@ func playerAcceptLoop(server *Server) {
 	}
 }
 
+func (player *Player) deleteAuthHandlers(){
+	player.controller.DeleteHandler(protocol.AuthWithMMToken)
+}
+
 func (server *Server) handleNewConnection(conn net.Conn, localId int) {
 	controller := protocol.CreateConnectionController()
 	if err := controller.SetConnection(conn); err != nil {
@@ -286,6 +290,7 @@ func (server *Server) handleNewConnection(conn net.Conn, localId int) {
 			fmt.Printf("Player auth was successful")
 
 		}
+		player.deleteAuthHandlers()
 		RegisterHandlers(player, server)
 	} else {
 		player.authenticated = true

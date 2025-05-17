@@ -50,7 +50,7 @@ type Move struct {
 	X        int
 	Y        int
 	Type     MoveType
-	PlayerId int
+	PlayerId uint32
 }
 
 type GameParams struct {
