@@ -3,10 +3,12 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/tomasstrnad1997/mines/mines"
+	"github.com/tomasstrnad1997/mines/players"
 )
 
 type MessageType byte
@@ -30,8 +32,8 @@ const (
 	RegisterPlayerResponse = 0xC1
 	AuthRequest            = 0xC2
 	AuthResponse           = 0xC3
-	GameAuthMMToken        = 0xC4
-	GameAuthReconnectToken = 0xC5
+	ConnectToGameRequest   = 0xC4
+	ConnectToGameResponse  = 0xC5
 )
 
 // Custom flags of special second byte
@@ -53,16 +55,32 @@ const (
 	UpdateCellByteLength = 9
 )
 
+var (
+	ErrInvalidPayloadSize = errors.New("invalid payload size")
+)
+
 type GameServerInfo struct {
-	Name        string
-	Host        string //IP for clients to connect to
+	Name string
+	// TODO: Remove host and port and add id of game
+	Host        string
 	Port        uint16
 	PlayerCount int
+}
+
+type GameServerConnectInfo struct {
+	Host string //IP for clients to connect to
+	Port uint16
 }
 
 type AuthPlayerParams struct {
 	Name     string
 	Password string
+}
+
+type GameConnectionResponse struct {
+	Success  bool
+	Token    *players.AuthToken
+	GameInfo *GameServerConnectInfo
 }
 
 func checkAndDecodeLength(data []byte, message MessageType) (int, error) {
@@ -111,7 +129,6 @@ func writePayloadLength(buf *bytes.Buffer, length int) error {
 	return nil
 }
 
-
 func EncodeAuthRequest(params AuthPlayerParams) ([]byte, error) {
 	return encodeAuthPlayerParamsMessage(params, AuthRequest)
 }
@@ -120,7 +137,7 @@ func DecodeAuthRequest(data []byte) (*AuthPlayerParams, error) {
 	return decodeAuthPlayerParams(data, AuthRequest)
 }
 
-func encodeAuthPlayerParamsMessage(params AuthPlayerParams, tp MessageType) ([]byte, error){
+func encodeAuthPlayerParamsMessage(params AuthPlayerParams, tp MessageType) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteByte(byte(tp))
 	buf.WriteByte(byte(0x00))
@@ -137,6 +154,160 @@ func encodeAuthPlayerParamsMessage(params AuthPlayerParams, tp MessageType) ([]b
 	return buf.Bytes(), nil
 }
 
+func EncodeConnectToGameResponse(response GameConnectionResponse) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(ConnectToGameResponse))
+	buf.WriteByte(byte(0x00))
+	if !response.Success {
+		if err := writePayloadLength(&buf, 1); err != nil {
+			return nil, err
+		}
+		if err := buf.WriteByte(0); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
+	if response.Token == nil || response.GameInfo == nil {
+		return nil, fmt.Errorf("Token and Game info can't be nill when succes == true")
+	}
+
+	gInfo, err := encodeGameServerConnectInfo(*response.GameInfo)
+	if err != nil {
+		return nil, err
+	}
+	token := encodeAuthToken(*response.Token)
+	payloadLenth := 1 + len(gInfo) + len(token)
+	if err := writePayloadLength(&buf, payloadLenth); err != nil {
+		return nil, err
+	}
+
+	if err := buf.WriteByte(1); err != nil {
+		return nil, err
+	}
+
+	if _, err := buf.Write(token); err != nil {
+		return nil, err
+	}
+
+	if _, err := buf.Write(gInfo); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func DecodeConnectToGameResponse(data []byte) (*GameConnectionResponse, error) {
+	pLen, err := checkAndDecodeLength(data, ConnectToGameResponse)
+	if err != nil {
+		return nil, err
+	}
+	if pLen == 0 {
+		return nil, ErrInvalidPayloadSize
+	}
+	payload := data[HeaderLength:]
+
+	// Denied request
+	if payload[0] != 1 {
+		if pLen != 1 {
+			return nil, ErrInvalidPayloadSize
+		}
+		return &GameConnectionResponse{Success: false}, nil
+	}
+
+	// Success + token + hostLen + host (atleast 1 char) + port
+	if pLen < 1+players.AuthTokenLength+4+1+2 {
+		return nil, ErrInvalidPayloadSize
+	}
+
+	token, err := decodeAuthToken(payload[1 : 1+players.AuthTokenLength])
+	if err != nil {
+		return nil, err
+	}
+
+	buf := bytes.NewReader(payload[1+players.AuthTokenLength:])
+	gsInfo, err := decodeGameServerConnectInfo(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GameConnectionResponse{
+		Success:  true,
+		Token:    &token,
+		GameInfo: gsInfo,
+	}, nil
+}
+
+func decodeAuthToken(data []byte) (players.AuthToken, error) {
+	if len(data) != players.AuthTokenLength {
+		return players.AuthToken{}, fmt.Errorf("invalid data size to decode auth token: %d", len(data))
+	}
+	var token players.AuthToken
+	token.PlayerID = binary.BigEndian.Uint32(data[0:4])
+	token.Expiry = int64(binary.BigEndian.Uint64(data[4:12]))
+	copy(token.Nonce[:], data[12:28])
+	copy(token.Signature[:], data[28:players.AuthTokenLength])
+	return token, nil
+}
+
+func encodeAuthToken(token players.AuthToken) []byte {
+	encoded := make([]byte, players.AuthTokenLength)
+	binary.BigEndian.PutUint32(encoded[0:4], token.PlayerID)
+	binary.BigEndian.PutUint64(encoded[4:12], uint64(token.Expiry))
+	copy(encoded[12:28], token.Nonce[:])
+	copy(encoded[28:players.AuthTokenLength], token.Signature[:])
+
+	return encoded
+}
+
+func encodeGameServerConnectInfo(server GameServerConnectInfo) ([]byte, error) {
+	// encoded structure |HostLength - int|host - string|port - uint16|
+	// Total lengt = 4+HostLength+2 = 6 + HostLength
+	var buf bytes.Buffer
+	if err := writeStringWithLength(&buf, server.Host); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(&buf, binary.BigEndian, server.Port); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func decodeGameServerConnectInfo(buf io.Reader) (*GameServerConnectInfo, error) {
+	host, err := readStringWithLength(buf)
+	if err != nil {
+		return nil, err
+	}
+	var port uint16
+	if err := binary.Read(buf, binary.BigEndian, &port); err != nil {
+		return nil, err
+	}
+	return &GameServerConnectInfo{Host: host, Port: port}, nil
+}
+
+func EncodeConnectToGameRequest(gameServerID uint32) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(ConnectToGameRequest))
+	buf.WriteByte(byte(0x00))
+	if err := writePayloadLength(&buf, 4); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(&buf, binary.BigEndian, gameServerID); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DecodeConnectToGameRequest(data []byte) (uint32, error) {
+	length, err := checkAndDecodeLength(data, ConnectToGameRequest)
+	if err != nil {
+		return 0, err
+	}
+	if length != 4 {
+		return 0, fmt.Errorf("ConnectToGameServerRequest payload lentth != 4 (got %d)", length)
+	}
+	return binary.BigEndian.Uint32(data[HeaderLength:]), nil
+}
+
 func DecodeAuthResponse(data []byte) (bool, error) {
 	_, err := checkAndDecodeLength(data, AuthResponse)
 	if err != nil {
@@ -144,7 +315,6 @@ func DecodeAuthResponse(data []byte) (bool, error) {
 	}
 	panic("Not implemented")
 }
-
 
 func EncodeRegisterPlayerResponse(success bool) ([]byte, error) {
 	var buf bytes.Buffer
@@ -176,7 +346,7 @@ func EncodeRegisterPlayerRequest(params AuthPlayerParams) ([]byte, error) {
 	return encodeAuthPlayerParamsMessage(params, RegisterPlayerRequest)
 }
 
-func encodePlayerParams(args AuthPlayerParams) ([]byte, error){
+func encodePlayerParams(args AuthPlayerParams) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := binary.Write(&buf, binary.BigEndian, int32(len(args.Name))); err != nil {
 		return nil, err
@@ -193,7 +363,7 @@ func decodeAuthPlayerParams(data []byte, tp MessageType) (*AuthPlayerParams, err
 		return nil, err
 	}
 	payload := data[HeaderLength:]
-	nameLen:= bytesToInt(payload[0:4])
+	nameLen := bytesToInt(payload[0:4])
 	passwordOffset := nameLen + 4
 	name := string(payload[4:passwordOffset])
 	password := string(payload[passwordOffset:])

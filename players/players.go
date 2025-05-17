@@ -22,6 +22,8 @@ type AuthToken struct {
 	Signature [32]byte
 }
 
+const AuthTokenLength = 4 + 8 + 16 + 32
+
 var (
 	ErrTokenExpired     = errors.New("token has expired")
 	ErrInvalidSignature = errors.New("invalid signature")
