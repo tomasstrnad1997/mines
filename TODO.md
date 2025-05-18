@@ -4,6 +4,8 @@
     * Maybe more gamemodes???
 * Storing game history in DB
 * Logs
+* Players
+    * Names
 * Game
     * Score
     * Time
@@ -33,6 +35,8 @@
     * Public/private
     * Passwords
     * ?Whitelist friends?
+* Player Auth
+    * Add game server id to auth token to make sure that player can only use the token to connect to that server
 * Protocol
     * Consider writing length at the end by owerwriting byte 3 and 4 in header
 * Move connection controller to ?protocol? so it can be used everywhere and connections are handled the same everywhere
