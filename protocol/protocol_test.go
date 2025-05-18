@@ -51,6 +51,7 @@ func TestServerInfoMessageEncoding(t *testing.T) {
 func TestGameConnectionResponse(t *testing.T) {
 	token := players.AuthToken{
 		PlayerID: 1235,
+		ServerID: 312,
 		Expiry:   time.Now().Unix(),
 		Nonce:    [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 		Signature: [32]byte{
