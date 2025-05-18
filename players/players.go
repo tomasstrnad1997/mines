@@ -18,16 +18,17 @@ type Service struct {
 type AuthToken struct {
 	PlayerID  uint32
 	Expiry    int64
+	ServerID  uint32
 	Nonce     [16]byte
 	Signature [32]byte
 }
 
 type PlayerInfo struct {
-	ID uint32
+	ID   uint32
 	Name string
 }
 
-const AuthTokenLength = 4 + 8 + 16 + 32
+const AuthTokenLength = 4 + 4 + 8 + 16 + 32
 
 var (
 	ErrTokenExpired     = errors.New("token has expired")
@@ -73,31 +74,33 @@ func checkPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func GenerateAuthToken(player *Player, secret []byte, ttl time.Duration) (AuthToken, error) {
+func GenerateAuthToken(player *Player, serverID uint32, secret []byte, ttl time.Duration) (AuthToken, error) {
 	expiration := time.Now().Add(ttl).Unix()
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return AuthToken{}, err
 	}
-	toSign := constructSignatureData(player.ID, nonce, expiration)
+	toSign := constructSignatureData(player.ID, serverID, nonce, expiration)
 	signature, err := calculateSignature(toSign, secret)
 	if err != nil {
 		return AuthToken{}, err
 	}
 	return AuthToken{
 		PlayerID:  player.ID,
+		ServerID:  serverID,
 		Expiry:    expiration,
 		Nonce:     nonce,
 		Signature: [32]byte(signature),
 	}, nil
 }
 
-func constructSignatureData(playerID uint32, nonce [16]byte, expiration int64) []byte {
-	// playerID + expiration + nonce
-	data := make([]byte, 4+8+16)
+func constructSignatureData(playerID, serverID uint32, nonce [16]byte, expiration int64) []byte {
+	// playerID + serverID + expiration + nonce
+	data := make([]byte, 4+4+8+16)
 	binary.BigEndian.PutUint32(data[0:4], playerID)
-	binary.BigEndian.PutUint64(data[4:12], uint64(expiration))
-	copy(data[12:], nonce[:])
+	binary.BigEndian.PutUint32(data[4:8], serverID)
+	binary.BigEndian.PutUint64(data[8:16], uint64(expiration))
+	copy(data[16:], nonce[:])
 	return data
 
 }
@@ -106,7 +109,7 @@ func ValidateAuthToken(token AuthToken, secret []byte) (bool, error) {
 	if time.Now().Unix() > token.Expiry {
 		return false, ErrTokenExpired
 	}
-	toVerify := constructSignatureData(token.PlayerID, token.Nonce, token.Expiry)
+	toVerify := constructSignatureData(token.PlayerID, token.ServerID, token.Nonce, token.Expiry)
 	expectedSignature, err := calculateSignature(toVerify, secret)
 	if err != nil {
 		return false, ErrInvalidFormat

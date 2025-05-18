@@ -270,18 +270,20 @@ func decodeAuthToken(data []byte) (players.AuthToken, error) {
 	}
 	var token players.AuthToken
 	token.PlayerID = binary.BigEndian.Uint32(data[0:4])
-	token.Expiry = int64(binary.BigEndian.Uint64(data[4:12]))
-	copy(token.Nonce[:], data[12:28])
-	copy(token.Signature[:], data[28:players.AuthTokenLength])
+	token.ServerID = binary.BigEndian.Uint32(data[4:8])
+	token.Expiry = int64(binary.BigEndian.Uint64(data[8:16]))
+	copy(token.Nonce[:], data[16:32])
+	copy(token.Signature[:], data[32:players.AuthTokenLength])
 	return token, nil
 }
 
 func encodeAuthToken(token players.AuthToken) []byte {
 	encoded := make([]byte, players.AuthTokenLength)
 	binary.BigEndian.PutUint32(encoded[0:4], token.PlayerID)
-	binary.BigEndian.PutUint64(encoded[4:12], uint64(token.Expiry))
-	copy(encoded[12:28], token.Nonce[:])
-	copy(encoded[28:players.AuthTokenLength], token.Signature[:])
+	binary.BigEndian.PutUint32(encoded[4:8], token.ServerID)
+	binary.BigEndian.PutUint64(encoded[8:16], uint64(token.Expiry))
+	copy(encoded[16:32], token.Nonce[:])
+	copy(encoded[32:players.AuthTokenLength], token.Signature[:])
 
 	return encoded
 }

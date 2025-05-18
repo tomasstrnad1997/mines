@@ -10,10 +10,11 @@ import (
 
 func TestTokenValidation(t *testing.T) {
 	secret := []byte("SECRET TOKEN")
+	var serverID uint32 = 234
 	player := players.Player{
 		ID: 1235,
 	}
-	token, err := players.GenerateAuthToken(&player, secret, time.Minute*10)
+	token, err := players.GenerateAuthToken(&player, serverID, secret, time.Minute*10)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -25,10 +26,11 @@ func TestTokenValidation(t *testing.T) {
 
 func TestTokenExpiration(t *testing.T) {
 	secret := []byte("SECRET TOKEN")
+	var serverID uint32 = 234
 	player := players.Player{
 		ID: 1235,
 	}
-	token, err := players.GenerateAuthToken(&player, secret, time.Minute*-1)
+	token, err := players.GenerateAuthToken(&player, serverID, secret, time.Minute*-1)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -43,10 +45,11 @@ func TestTokenExpiration(t *testing.T) {
 
 func TestTokenModification(t *testing.T) {
 	secret := []byte("SECRET TOKEN")
+	var serverID uint32 = 234
 	player := players.Player{
 		ID: 1235,
 	}
-	token, err := players.GenerateAuthToken(&player, secret, time.Minute*-1)
+	token, err := players.GenerateAuthToken(&player, serverID, secret, time.Minute*-1)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
